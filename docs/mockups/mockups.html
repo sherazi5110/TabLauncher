@@ -376,7 +376,6 @@ function screenLibrary() {
     const c = i % cols, r = Math.floor(i / cols);
     h += libTile(x0 + c * (size + gapX), 124 + r * 254, size, t[0], t[1]);
   });
-  h += dock(DOCK_PINNED, DOCK_RECENT, 58, 694);
   return h;
 }
 
