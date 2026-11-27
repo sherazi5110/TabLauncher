@@ -34,6 +34,17 @@ class LayoutStore(context: Context) {
 
     fun removeHomeItem(id: String) = update { l -> l.copy(home = l.home.filterNot { it.id == id }) }
 
+    /** Puts the selected Home apps (and the apps of selected folders) into one new folder. */
+    fun groupIntoFolder(ids: Set<String>, name: String = "Folder") = update { l ->
+        val chosen = l.home.filter { it.id in ids }
+        if (chosen.size < 2) return@update l
+        val keys = chosen.flatMap { if (it is HomeItem.Folder) it.apps else listOf((it as HomeItem.App).key) }.distinct()
+        val at = l.home.indexOfFirst { it.id in ids }
+        val list = l.home.filterNot { it.id in ids }.toMutableList()
+        list.add(at.coerceIn(0, list.size), HomeItem.Folder(UUID.randomUUID().toString().take(8), name, keys))
+        l.copy(home = list)
+    }
+
     /** Removes a whole Home page; its apps stay in the App Library. */
     fun removeHomeItems(ids: Set<String>) = update { l -> l.copy(home = l.home.filterNot { it.id in ids }) }
 

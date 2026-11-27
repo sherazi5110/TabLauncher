@@ -105,7 +105,20 @@ class LauncherController(val app: TabLauncherApp) {
 
     var rootView: View? = null
     var pages: List<Page> = emptyList()
-    var packed: List<List<Placed>> = emptyList()
+    var packed by mutableStateOf<List<List<Placed>>>(emptyList())
+
+    /** Multi-select on Home: ids of the selected Home items. */
+    var selecting by mutableStateOf(false)
+    var selected by mutableStateOf(setOf<String>())
+
+    fun toggleSelected(id: String) {
+        selected = if (id in selected) selected - id else selected + id
+    }
+
+    fun endSelection() {
+        selecting = false
+        selected = emptySet()
+    }
     var currentPage = 0
 
     /** Time of the last finger-down on an icon/widget, so a long-press there doesn't also open Customize. */
@@ -132,6 +145,7 @@ class LauncherController(val app: TabLauncherApp) {
     fun onBack(): Boolean {
         when {
             menu != null -> menu = null
+            selecting -> endSelection()
             drag.session != null -> drag.reset()
             widgetPicker != null -> widgetPicker = null
             renameFolder != null -> renameFolder = null

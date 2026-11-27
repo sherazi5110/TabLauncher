@@ -45,6 +45,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -87,6 +91,9 @@ fun AppLibraryPage(m: HomeMetrics) {
     val usageMap by ctl.app.usage.usage.collectAsState()
     var query by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
+    // Only take keyboard focus after a real tap; otherwise Android may focus this box on start-up
+    // and jump the launcher to the App Library.
+    var allowFocus by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val apps = remember(all, s.hidden) { all.filter { it.key !in s.hidden } }
     val groups = remember(apps, usageMap) { libraryGroups(apps, ctl.app.usage) }
@@ -101,7 +108,15 @@ fun AppLibraryPage(m: HomeMetrics) {
                 value = query,
                 onChange = { query = it },
                 placeholder = "App Library",
-                modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+                modifier = Modifier.weight(1f)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                            allowFocus = true
+                        }
+                    }
+                    .focusProperties { canFocus = allowFocus }
+                    .onFocusChanged { focused = it.isFocused; if (!it.isFocused && query.isEmpty()) allowFocus = false },
             )
             if (focused || query.isNotEmpty()) {
                 Text("Cancel", color = c.accent, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,

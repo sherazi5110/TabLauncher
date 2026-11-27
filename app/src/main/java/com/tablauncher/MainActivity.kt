@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
 
-        controller = LauncherController(app).apply {
+        controller = (app.controller ?: LauncherController(app).also { app.controller = it }).apply {
             rootView = window.decorView
             requestPermission = { permissionLauncher.launch(it) }
             addAppWidget = ::startAddWidget

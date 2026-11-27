@@ -56,15 +56,23 @@ class WallpaperStore(private val context: Context) {
 
     /** Full-screen bitmap for [id], or null for "system". */
     suspend fun load(id: String, dark: Boolean, w: Int, h: Int): Bitmap? = withContext(Dispatchers.Default) {
+        try { loadUnsafe(id, dark, w, h) } catch (e: Throwable) { null }
+    }
+
+    private fun loadUnsafe(id: String, dark: Boolean, w: Int, h: Int): Bitmap? = run {
         when {
             id == "system" -> null
-            id.startsWith("file:") -> decodeFile(File(dir, id.removePrefix("file:")), maxSide = 4096)
+            id.startsWith("file:") -> decodeFile(File(dir, id.removePrefix("file:")), maxSide = (maxOf(w, h) * 3 / 2).coerceIn(1080, 4096))
                 ?: WallpaperRenderer.render("waves", dark, w, h)
             else -> WallpaperRenderer.render(id.removePrefix("builtin:"), dark, w, h)
         }
     }
 
     suspend fun thumbnail(id: String, dark: Boolean, w: Int, h: Int): Bitmap? = withContext(Dispatchers.Default) {
+        runCatching { thumbUnsafe(id, dark, w, h) }.getOrNull()
+    }
+
+    private fun thumbUnsafe(id: String, dark: Boolean, w: Int, h: Int): Bitmap? = run {
         when {
             id == "system" -> null
             id.startsWith("file:") -> decodeFile(File(dir, id.removePrefix("file:")), maxSide = maxOf(w, h) * 2)
@@ -99,7 +107,7 @@ class WallpaperStore(private val context: Context) {
             }
             prefs.edit().putString("applied", signature).apply()
             true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             false
         }
     }

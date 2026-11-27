@@ -52,7 +52,8 @@ data class SettingsData(
     val sportsLeagues: List<String> = listOf("soccer/eng.1", "soccer/uefa.champions", "cricket", "basketball/nba"),
     val lightWallpaper: String = "builtin:waves",
     val darkWallpaper: String = "builtin:waves",
-    val lockScreenSync: Boolean = true,
+    val lockScreenSync: Boolean = false,
+    val fullScreen: Boolean = false,
 )
 
 /** Persistent launcher settings, observable as a [StateFlow]. */
@@ -121,6 +122,7 @@ class Settings(context: Context) {
             lightWallpaper = sp.getString(WP_LIGHT, null) ?: d.lightWallpaper,
             darkWallpaper = sp.getString(WP_DARK, null) ?: d.darkWallpaper,
             lockScreenSync = sp.getBoolean(LOCK_SYNC, d.lockScreenSync),
+            fullScreen = sp.getBoolean(FULL_SCREEN, d.fullScreen),
         )
     }
 
@@ -154,6 +156,7 @@ class Settings(context: Context) {
         const val WP_LIGHT = "wp_light"
         const val WP_DARK = "wp_dark"
         const val LOCK_SYNC = "lock_sync"
+        const val FULL_SCREEN = "full_screen"
     }
 }
 

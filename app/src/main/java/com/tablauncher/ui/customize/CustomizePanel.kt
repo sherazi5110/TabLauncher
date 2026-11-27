@@ -281,7 +281,16 @@ private fun WallpaperTab() {
     fun choose(id: String) = ctl.app.settings.set(if (editDark) Settings.WP_DARK else Settings.WP_LIGHT, id)
 
     SectionTitle("Theme")
-    Segmented(ThemeMode.entries, st.themeMode, { it.title }) { ctl.app.settings.set(Settings.THEME, it) }
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    Segmented(ThemeMode.entries, st.themeMode, { it.title }) {
+        ctl.app.settings.set(Settings.THEME, it)
+        // Show the chosen theme in the preview straight away.
+        editDark = when (it) {
+            ThemeMode.LIGHT -> false
+            ThemeMode.DARK -> true
+            ThemeMode.SYSTEM -> systemDark
+        }
+    }
     Text("Auto follows your tablet's dark mode setting.", color = c.text2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 6.dp))
 
     SectionTitle("Choose wallpaper for")
@@ -426,6 +435,7 @@ private fun LayoutTab() {
     Segmented(listOf(false, true), st.libraryOnLeft, { if (it) "App Library on left" else "App Library on right" }) { set(Settings.LIBRARY_LEFT, it) }
     Spacer(Modifier.height(12.dp))
     ActionButton("Edit widgets", Icons.Rounded.Widgets) { ctl.editWidgets = true; ctl.customizeOpen = false }
+    ActionButton("Select apps to remove or group", Icons.Rounded.Apps) { ctl.customizeOpen = false; ctl.selecting = true }
     ActionButton("Reset Home Screen layout", Icons.Rounded.AppRegistration) {
         ctl.app.layout.resetHome(ctl.app.apps.apps.value, ctl.app.settings.current)
     }
@@ -615,6 +625,12 @@ private fun MoreTab() {
         Text("TabLauncher is your Home app ✓", color = c.text, fontSize = 15.sp, modifier = Modifier.padding(vertical = 8.dp))
     } else {
         ActionButton("Set TabLauncher as default Home app") { requestDefaultLauncher(ctx, ctl) }
+    }
+
+    SectionTitle("Screen")
+    Group {
+        SwitchRow("Full screen", "Hide the status and navigation bars. Swipe from the top or bottom edge to show them.",
+            st.fullScreen) { ctl.app.settings.set(Settings.FULL_SCREEN, it) }
     }
 
     SectionTitle("Gestures")

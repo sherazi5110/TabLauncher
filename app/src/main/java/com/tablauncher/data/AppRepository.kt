@@ -48,7 +48,7 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
     /** Bumped when icons must be redrawn (an app was updated). */
     val iconVersion = MutableStateFlow(0)
 
-    private val iconCache = object : LruCache<String, ImageBitmap>(96 * 1024 * 1024) {
+    private val iconCache = object : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
     }
     private val iconSize = (context.resources.displayMetrics.density * 84).toInt().coerceIn(128, 256)

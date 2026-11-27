@@ -33,8 +33,23 @@ class TabLauncherApp : Application() {
     lateinit var calendar: CalendarRepo
     lateinit var wallpapers: WallpaperStore
 
+    /** Survives the screen being re-created (e.g. after the system wallpaper changes). */
+    var controller: com.tablauncher.ui.LauncherController? = null
+
     override fun onCreate() {
         super.onCreate()
+        // Save any crash so the launcher can show it next time it opens.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching {
+                val version = packageManager.getPackageInfo(packageName, 0).versionName
+                java.io.File(filesDir, CRASH_FILE).writeText(
+                    "TabLauncher $version · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MODEL}\n\n" +
+                        android.util.Log.getStackTraceString(error)
+                )
+            }
+            previous?.uncaughtException(thread, error)
+        }
         settings = Settings(this)
         apps = AppRepository(this, scope)
         layout = LayoutStore(this)
@@ -55,5 +70,7 @@ class TabLauncherApp : Application() {
         }
     }
 }
+
+const val CRASH_FILE = "last_crash.txt"
 
 val Context.launcherApp: TabLauncherApp get() = applicationContext as TabLauncherApp

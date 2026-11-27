@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -168,7 +170,7 @@ fun LauncherRoot(ctl: LauncherController) {
         val byKey by ctl.app.apps.byKey.collectAsState()
         val dragging = ctl.drag.session != null
         val packed = remember(layout.home, m.cols, m.rows, m.firstRows) { packHome(layout.home, m.cols, m.firstRows, m.rows) }
-        ctl.packed = packed
+        SideEffect { ctl.packed = packed }
         val homeCount = packed.size + if (dragging) 1 else 0
         val pages = remember(homeCount, s.libraryOnLeft) {
             buildList {
@@ -211,6 +213,10 @@ fun LauncherRoot(ctl: LauncherController) {
             WindowCompat.getInsetsController(w, view).apply {
                 isAppearanceLightStatusBars = lightBars
                 isAppearanceLightNavigationBars = lightBars
+                // Full screen: hide the status & navigation bars; swipe from the edge to show them briefly.
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (s.fullScreen) hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                else show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             }
         }
 
@@ -230,7 +236,7 @@ fun LauncherRoot(ctl: LauncherController) {
             label = "customize",
         )
         val panelW = min(600.dp, maxWidth * 0.46f)
-        val previewScale = 1f - (1f - ((maxWidth - panelW - 48.dp) / maxWidth)) * customize
+        val previewScale = 1f - (1f - ((maxWidth - panelW - 48.dp) / maxWidth)) * customize.coerceIn(0f, 1f)
 
         LauncherTheme(colors, fontFamily(s.font), clockWeight(s.clockWeight)) {
             CompositionLocalProvider(
@@ -269,7 +275,7 @@ fun LauncherRoot(ctl: LauncherController) {
                                 transformOrigin = TransformOrigin(0f, 0.5f)
                                 translationX = 24.dp.toPx() * customize
                                 clip = customize > 0f
-                                this.shape = RoundedCornerShape((28 * customize).dp)
+                                this.shape = RoundedCornerShape((28 * customize.coerceIn(0f, 1f)).dp)
                             }
                     ) {
                         wallpaper.image?.let {
@@ -288,6 +294,7 @@ fun LauncherRoot(ctl: LauncherController) {
                                 is Page.Home -> Box(
                                     Modifier
                                         .fillMaxSize()
+                                        
                                         .pointerInput(s.swipeDown) {
                                             var total = 0f
                                             val threshold = 70.dp.toPx()
@@ -340,6 +347,7 @@ fun LauncherRoot(ctl: LauncherController) {
                             }
                         }
                         DefaultLauncherBanner(Modifier.align(Alignment.TopCenter).padding(top = topInset + 8.dp))
+                        if (ctl.selecting && onHome) SelectionBar(Modifier.align(Alignment.TopCenter).padding(top = topInset + 8.dp))
                         if (customize > 0f) {
                             Box(Modifier.fillMaxSize().clickable(interactionSource = null, indication = null) { ctl.customizeOpen = false })
                         }
@@ -384,6 +392,7 @@ fun LauncherRoot(ctl: LauncherController) {
                     if (ctl.menu != null) lastMenu = ctl.menu
                     AnimatedVisibility(ctl.menu != null, enter = popIn, exit = popOut) { lastMenu?.let { MenuPopup(it) } }
                     ctl.renameFolder?.let { RenameFolderDialog(it) }
+                    CrashReportDialog()
                 }
             }
         }
@@ -436,3 +445,68 @@ private fun systemWallpaperIsDark(context: android.content.Context, fallback: Bo
         (0.299 * AColor.red(p) + 0.587 * AColor.green(p) + 0.114 * AColor.blue(p)) / 255.0 < 0.55
     }
 }
+
+@Composable
+private fun SelectionBar(modifier: Modifier) {
+    val ctl = LocalController.current
+    val c = LocalColors.current
+    val n = ctl.selected.size
+    Row(
+        modifier.clip(RoundedCornerShape(24.dp)).background(c.card).padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(if (n == 0) "Tap apps to select" else "$n selected", color = c.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+            modifier = Modifier.padding(horizontal = 10.dp))
+        @Composable
+        fun action(label: String, color: Color, enabled: Boolean, onClick: () -> Unit) {
+            Text(label, color = if (enabled) color else c.text2, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(c.card2).clickable(enabled = enabled, onClick = onClick)
+                    .padding(horizontal = 14.dp, vertical = 8.dp))
+        }
+        action("Remove from Home", Color(0xFFFF3B30), n > 0) {
+            ctl.app.layout.removeHomeItems(ctl.selected)
+            ctl.endSelection()
+        }
+        action("Put in a folder", c.accent, n > 1) {
+            ctl.app.layout.groupIntoFolder(ctl.selected)
+            ctl.endSelection()
+        }
+        action("Done", c.accent, true) { ctl.endSelection() }
+    }
+}
+
+/** If the launcher crashed last time, show what went wrong so it can be reported and fixed. */
+@Composable
+private fun CrashReportDialog() {
+    val ctx = LocalContext.current
+    val file = remember { java.io.File(ctx.filesDir, com.tablauncher.CRASH_FILE) }
+    var text by remember { mutableStateOf(runCatching { if (file.exists()) file.readText() else null }.getOrNull()) }
+    val report = text ?: return
+    fun close() { file.delete(); text = null }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = ::close,
+        title = { Text("TabLauncher crashed last time") },
+        text = {
+            Column {
+                Text("Please take a screenshot of this and send it, so it can be fixed.", fontSize = 14.sp)
+                Spacer(Modifier.padding(top = 8.dp))
+                Text(report.lines().take(28).joinToString("\n"), fontSize = 11.sp, lineHeight = 13.sp,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    modifier = Modifier.androidx_verticalScroll())
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton({
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("TabLauncher crash", report))
+                android.widget.Toast.makeText(ctx, "Copied", android.widget.Toast.LENGTH_SHORT).show()
+            }) { Text("Copy") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(::close) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun Modifier.androidx_verticalScroll(): Modifier =
+    this.then(Modifier.heightIn(max = 360.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()))
