@@ -42,6 +42,8 @@ In portrait the widgets move to a row across the top and the grid becomes 5 colu
 
 - Greeting + date.
 - **Search bar** (opens search; mic = voice search, the camera button opens Google Lens if installed).
+- **Live scores** — Premier League, Champions League, LaLiga, Serie A, Bundesliga, Ligue 1, MLS, Saudi Pro League,
+  World Cup, Cricket, NBA, WNBA, NFL, MLB, NHL (pick your leagues in Customize → Widgets).
 - **Weather** with hourly and 3-day forecast (free Open-Meteo service, no account needed).
 - **Up Next** from your calendar.
 - **Top stories** from **Google News** in English, with topic tabs (World, Business, Technology, Sports…).
@@ -63,6 +65,7 @@ In portrait the widgets move to a row across the top and the grid becomes 5 colu
 - Apps are **automatically grouped** into category boxes: Suggestions, Recently Added, Productivity & Finance,
   Social, Utilities, Creativity, Entertainment, Information & Reading, Games, Health & Fitness, Shopping & Food, Travel.
 - Each box shows 3 big icons (tap to open) and a cluster of small icons (tap to open the whole category).
+- **No dock** on this page (and on the Widgets page) — the dock fades out as you swipe here.
 - Long-press any app: Add to Home Screen, Add to Dock, Hide app, App info, Uninstall.
 - The positions of Widgets page and App Library can be swapped in Settings.
 
@@ -95,7 +98,20 @@ In portrait the widgets move to a row across the top and the grid becomes 5 colu
 | Long-press empty space | Edit mode (icons wiggle, add widgets, open Settings) |
 | Home button | Go back to the first Home page |
 
-## 6. Settings
+## 6. Customize (long-press an empty spot on Home)
+
+The Home Screen shrinks into a live preview on the left and a Customize panel opens on the right, so every change is
+visible immediately.
+
+- **Wallpaper:** Auto / Light / Dark theme, a wallpaper for each mode (built-in designs or your own photos at full
+  resolution), and the option to apply it to the **Lock screen** too.
+- **Layout:** columns & rows for landscape and portrait, widgets on Home, recent apps in Dock, App Library side, reset.
+- **Icons:** shape (Squircle, Rounded, Circle, Square, Teardrop), size, style (Auto, Light, Dark, Tinted + colour), labels.
+- **Fonts:** Inter, Poppins, Nunito, Outfit, Manrope, Quicksand, Lora or System; clock thickness.
+- **Widgets:** add/remove/reorder, weather city & units, sports leagues, news country, world-clock cities.
+- **More:** swipe-down action, hidden apps, default Home app, about.
+
+## 6b. Settings (original plan)
 
 - **Appearance:** Theme (System / Light / Dark), icon style (Auto / Always light / Always dark / Tinted single colour),
   Light & Dark wallpaper, option to also apply the wallpaper to the lock screen.
