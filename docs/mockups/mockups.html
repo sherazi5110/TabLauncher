@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TabLauncher mockups</title>
+<!--
+  Design mockups for TabLauncher. Render a screen with query params:
+    ?s=home|today|library|search  &t=light|dark  &o=land|port
+  App icons here are generic placeholders; on the tablet the launcher shows
+  your real app icons (re-coloured for dark mode).
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Inter, sans-serif; background: #000; }
+  .screen { position: relative; overflow: hidden; }
+  .abs { position: absolute; }
+  .light { --text: #1C1C1E; --text2: #6B6B72; --card: #FFFFFF; --card2: #F2F2F5; --line: #E6E6EA;
+           --shadow: 0 6px 22px rgba(20, 24, 40, .10); --page: #F2F2F7; --accent: #2F6BFF; }
+  .dark  { --text: #F5F5F7; --text2: #9A9AA2; --card: #1C1C1E; --card2: #2A2A2D; --line: #2E2E32;
+           --shadow: 0 6px 22px rgba(0, 0, 0, .45); --page: #0B0B0D; --accent: #5B8CFF; }
+
+  .ic { display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+  .ic svg { display: block; }
+  .cell { position: absolute; display: flex; flex-direction: column; align-items: center; }
+  .label { margin-top: 7px; font-size: 12.5px; font-weight: 500; color: var(--text); white-space: nowrap;
+           max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+  .card { background: var(--card); border-radius: 22px; box-shadow: var(--shadow); color: var(--text); }
+  .card-h { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text2);
+            display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 4px; display: inline-block; }
+
+  .dock { background: var(--card); border-radius: 30px; box-shadow: var(--shadow); display: flex; align-items: center;
+          padding: 14px; gap: 18px; }
+  .dark .dock { border: 1px solid #2C2C30; }
+  .dock .sep { width: 1px; align-self: stretch; background: var(--line); margin: 4px 0; }
+
+  .statusbar { position: absolute; top: 0; left: 0; right: 0; height: 30px; display: flex; align-items: center;
+               justify-content: space-between; padding: 0 24px; font-size: 13px; font-weight: 600; color: var(--text); z-index: 5; }
+  .sb-r { display: flex; gap: 8px; align-items: center; }
+
+  .pill { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); display: flex; align-items: center;
+          gap: 10px; color: var(--text2); font-size: 16px; }
+  .chip { font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 16px; background: var(--card2); color: var(--text2); }
+  .chip.on { background: var(--accent); color: #fff; }
+  .row { display: flex; align-items: center; }
+  .kbd { background: #D3D6DD; }
+  .dark .kbd { background: #2B2B2F; }
+  .key { background: #fff; border-radius: 7px; height: 52px; display: flex; align-items: center; justify-content: center;
+         font-size: 20px; color: #1C1C1E; box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+  .dark .key { background: #48484D; color: #fff; }
+  .key.mod { background: #ADB2BC; font-size: 15px; }
+  .dark .key.mod { background: #333338; }
+</style>
+</head>
+<body>
+<div id="screen" class="screen"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const S = P.get('s') || 'home', T = P.get('t') || 'light', O = P.get('o') || 'land';
+const LAND = O === 'land';
+const W = LAND ? 1280 : 800, H = LAND ? 800 : 1280;
+const DARK = T === 'dark';
+const root = document.getElementById('screen');
+root.className = `screen ${T}`;
+root.style.width = W + 'px'; root.style.height = H + 'px';
+
+// ---------- glyphs (24x24, drawn with currentColor; --c is the cut-out colour) ----------
+const CUT = 'style="fill:var(--c)"', CUTS = 'style="stroke:var(--c)"';
+const GL = {
+  globe: `<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><ellipse cx="12" cy="12" rx="3.8" ry="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 12h17M5 7.6h14M5 16.4h14" stroke="currentColor" stroke-width="1.4"/>`,
+  mail: `<rect x="3" y="5.5" width="18" height="13" rx="2.5" fill="currentColor"/><path d="M3.8 7l8.2 6 8.2-6" fill="none" ${CUTS} stroke-width="1.7"/>`,
+  chat: `<path d="M12 4C7 4 3 7.3 3 11.4c0 2.3 1.3 4.4 3.3 5.8L5.6 20.5l3.6-2c.9.2 1.8.3 2.8.3 5 0 9-3.3 9-7.4S17 4 12 4z" fill="currentColor"/>`,
+  play: `<path d="M8.5 5.5v13l11-6.5z" fill="currentColor"/>`,
+  note: `<path d="M9 18.5a2.5 2.5 0 1 1-2.5-2.5c.6 0 1.1.2 1.5.5V6l10-2v11.5a2.5 2.5 0 1 1-2.5-2.5c.6 0 1.1.2 1.5.5V7.3L9 8.8z" fill="currentColor"/>`,
+  camera: `<rect x="3" y="7" width="18" height="12.5" rx="3" fill="currentColor"/><path d="M8.3 7.5l1.6-2.8h4.2l1.6 2.8z" fill="currentColor"/><circle cx="12" cy="13.2" r="3.7" ${CUT}/><circle cx="12" cy="13.2" r="2.2" fill="currentColor"/>`,
+  folder: `<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" fill="currentColor"/>`,
+  gear: `<circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="3.6" stroke-dasharray="2.75 2.75"/><circle cx="12" cy="12" r="5.6" fill="currentColor"/><circle cx="12" cy="12" r="2.3" ${CUT}/>`,
+  notes: `<rect x="5" y="3.5" width="14" height="17" rx="2.5" fill="currentColor"/><path d="M8 8.5h8M8 12h8M8 15.5h5" ${CUTS} stroke-width="1.6" stroke-linecap="round"/>`,
+  pin: `<path d="M12 3a6 6 0 0 0-6 6c0 4.5 6 11.5 6 11.5S18 13.5 18 9a6 6 0 0 0-6-6z" fill="currentColor"/><circle cx="12" cy="9" r="2.3" ${CUT}/>`,
+  bag: `<path d="M5 8.5h14l-1.2 11a1.8 1.8 0 0 1-1.8 1.5H8a1.8 1.8 0 0 1-1.8-1.5z" fill="currentColor"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" fill="none" ${CUTS} stroke-width="1.7" stroke-linecap="round"/>`,
+  cloud: `<circle cx="9" cy="8.5" r="3.3" fill="#FFD54A"/><path d="M8 19a4.3 4.3 0 0 1-.4-8.6 5.3 5.3 0 0 1 10.2-.3A4.5 4.5 0 0 1 17.3 19z" fill="currentColor"/>`,
+  calc: `<rect x="5" y="3.5" width="14" height="17" rx="2.5" fill="currentColor"/><rect x="7.5" y="6" width="9" height="3.5" rx="1" ${CUT}/><g ${CUT}><circle cx="8.6" cy="12.6" r="1.1"/><circle cx="12" cy="12.6" r="1.1"/><circle cx="15.4" cy="12.6" r="1.1"/><circle cx="8.6" cy="16.4" r="1.1"/><circle cx="12" cy="16.4" r="1.1"/><circle cx="15.4" cy="16.4" r="1.1"/></g>`,
+  book: `<path d="M3 6c3-1.5 6-1.5 9 .5v13c-3-2-6-2-9-.5zM21 6c-3-1.5-6-1.5-9 .5v13c3-2 6-2 9-.5z" fill="currentColor"/><path d="M12 6.5v13" ${CUTS} stroke-width="1.2"/>`,
+  game: `<path d="M7 8h10a4.5 4.5 0 0 1 4.3 5.8l-.9 3a2.4 2.4 0 0 1-4 1L15 16H9l-1.4 1.8a2.4 2.4 0 0 1-4-1l-.9-3A4.5 4.5 0 0 1 7 8z" fill="currentColor"/><path d="M8 10.6v3.2M6.4 12.2h3.2" ${CUTS} stroke-width="1.5" stroke-linecap="round"/><circle cx="15.4" cy="11.3" r="1.05" ${CUT}/><circle cx="17.1" cy="13.3" r="1.05" ${CUT}/>`,
+  podcast: `<circle cx="12" cy="10" r="2.6" fill="currentColor"/><path d="M10.6 14h2.8l-.6 6.5h-1.6z" fill="currentColor"/><path d="M7.4 14.6a6.4 6.4 0 1 1 9.2 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>`,
+  tv: `<rect x="3" y="5" width="18" height="12" rx="2" fill="currentColor"/><path d="M9 20h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.4 8.6v5l4.2-2.5z" ${CUT}/>`,
+  heart: `<path d="M12 20s-7.5-4.6-7.5-10A4.2 4.2 0 0 1 12 7.6 4.2 4.2 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z" fill="currentColor"/>`,
+  people: `<circle cx="9" cy="9" r="3" fill="currentColor"/><path d="M3.5 18.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5z" fill="currentColor"/><circle cx="16.6" cy="9.6" r="2.4" fill="currentColor" opacity=".75"/><path d="M15.4 13.6c3 0 5.1 1.9 5.1 4.9h-4.6z" fill="currentColor" opacity=".75"/>`,
+  film: `<circle cx="12" cy="12" r="8.4" fill="currentColor"/><g ${CUT}><circle cx="12" cy="7.4" r="1.9"/><circle cx="12" cy="16.6" r="1.9"/><circle cx="7.4" cy="12" r="1.9"/><circle cx="16.6" cy="12" r="1.9"/><circle cx="12" cy="12" r=".9"/></g>`,
+  doc: `<path d="M6.5 3h7l4.5 4.5V19a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor"/><path d="M8 11h8M8 14h8M8 17h5" ${CUTS} stroke-width="1.4"/>`,
+  wallet: `<rect x="3" y="6" width="18" height="13" rx="2.5" fill="currentColor"/><rect x="14" y="10.5" width="7" height="4" rx="1.2" ${CUT}/>`,
+  aa: `<text x="12" y="16.6" text-anchor="middle" font-family="Inter" font-weight="700" font-size="11.5" fill="currentColor">Aa</text>`,
+  pencil: `<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z" fill="currentColor"/>`,
+  video: `<rect x="3" y="7" width="12" height="10" rx="2.5" fill="currentColor"/><path d="M16 10.5l5-3v9l-5-3z" fill="currentColor"/>`,
+  compass: `<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M15.5 8.5L13 13l-4.5 2.5L11 11z" fill="currentColor"/>`,
+  download: `<path d="M12 4v10M7.5 10l4.5 4.5 4.5-4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>`,
+  person: `<circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5 19.5c0-3.6 3.1-6 7-6s7 2.4 7 6z" fill="currentColor"/>`,
+  star: `<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.8z" fill="currentColor"/>`,
+  store: `<path d="M5.5 4.3l9.2 7.7-9.2 7.7c-.3-.2-.5-.6-.5-1V5.3c0-.4.2-.8.5-1z" fill="currentColor"/><path d="M14.7 12l3.6-2.1c.9.5.9 1.7 0 2.2L14.7 14.2z" fill="currentColor" opacity=".8"/>`,
+  mic: `<rect x="9" y="3.5" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11.5a6 6 0 0 0 12 0M12 17.5v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
+};
+
+const APPS = {
+  'Browser':    ['globe',  '#4A90FF', '#1D4ED8'],
+  'Mail':       ['mail',   '#3EC1FF', '#0284C7'],
+  'Messages':   ['chat',   '#4ADE80', '#16A34A'],
+  'Video':      ['play',   '#FF6B6B', '#DC2626'],
+  'Music':      ['note',   '#FF6B8A', '#E11D48'],
+  'Photos':     ['special'],
+  'Camera':     ['camera', '#A1A1AA', '#52525B'],
+  'Files':      ['folder', '#6AA8FF', '#2563EB'],
+  'Settings':   ['gear',   '#A8A8B0', '#5B5B63'],
+  'Calendar':   ['special'],
+  'Clock':      ['special'],
+  'Notes':      ['notes',  '#FFD84D', '#EAB308'],
+  'Maps':       ['pin',    '#34D399', '#059669'],
+  'Store':      ['store',  '#2DD4BF', '#0E7490'],
+  'Weather':    ['cloud',  '#7CC4FF', '#2563EB'],
+  'Calculator': ['calc',   '#FFA23A', '#EA580C'],
+  'Books':      ['book',   '#FF9F45', '#EA580C'],
+  'Games':      ['game',   '#A98BFF', '#7C3AED'],
+  'Podcasts':   ['podcast','#C98BFF', '#9333EA'],
+  'TV':         ['tv',     '#52525B', '#18181B'],
+  'Fitness':    ['heart',  '#FF7AC0', '#DB2777'],
+  'Social':     ['people', '#8D96FF', '#4F46E5'],
+  'MovieBox':   ['film',   '#FF5A75', '#9F1239'],
+  'Docs':       ['doc',    '#5A9BFF', '#1D4ED8'],
+  'Wallet':     ['wallet', '#22C996', '#047857'],
+  'Translate':  ['aa',     '#7479FF', '#4338CA'],
+  'Shop':       ['bag',    '#FF9A3D', '#F97316'],
+  'Meet':       ['video',  '#2ED3BE', '#0D9488'],
+  'Sketch':     ['pencil', '#FF7AC0', '#BE185D'],
+  'Explore':    ['compass','#FF7A7A', '#B91C1C'],
+  'Downloads':  ['download','#9BAAC0','#475569'],
+  'Contacts':   ['person', '#B0B0B8', '#636369'],
+  'Reader':     ['star',   '#FFB648', '#D97706'],
+  'Recorder':   ['mic',    '#FF6B6B', '#B91C1C'],
+};
+
+function icon(name, size) {
+  const a = APPS[name] || APPS['Settings'];
+  const r = Math.round(size * 0.235);
+  const darkBg = 'linear-gradient(180deg,#333337,#1C1C1F)';
+  let inner = '', bg, cut, glyph;
+  if (a[0] === 'special') {
+    if (name === 'Calendar') {
+      bg = DARK ? darkBg : '#fff';
+      inner = `<div style="text-align:center;line-height:1"><div style="font-size:${size*.15}px;font-weight:700;color:#FF3B30;letter-spacing:.04em">FRI</div><div style="font-size:${size*.45}px;font-weight:400;color:${DARK?'#fff':'#1C1C1E'};margin-top:${size*.02}px">27</div></div>`;
+    } else if (name === 'Clock') {
+      bg = '#111113';
+      const c = size * .4, hand = DARK ? '#FF9F0A' : '#FF9F0A';
+      inner = `<svg width="${size}" height="${size}" viewBox="0 0 100 100"><circle cx="50" cy="50" r="38" fill="${DARK?'#2A2A2E':'#fff'}"/>${[...Array(12)].map((_,i)=>{const t=i*Math.PI/6;return `<line x1="${50+31*Math.sin(t)}" y1="${50-31*Math.cos(t)}" x2="${50+35*Math.sin(t)}" y2="${50-35*Math.cos(t)}" stroke="${DARK?'#bbb':'#1C1C1E'}" stroke-width="2"/>`}).join('')}<line x1="50" y1="50" x2="50" y2="28" stroke="${DARK?'#fff':'#1C1C1E'}" stroke-width="4" stroke-linecap="round"/><line x1="50" y1="50" x2="68" y2="58" stroke="${DARK?'#fff':'#1C1C1E'}" stroke-width="3" stroke-linecap="round"/><line x1="50" y1="50" x2="36" y2="70" stroke="${hand}" stroke-width="1.6"/><circle cx="50" cy="50" r="3" fill="${hand}"/></svg>`;
+    } else if (name === 'Photos') {
+      bg = DARK ? darkBg : '#fff';
+      const cols = ['#FFB020','#FF6A3D','#E94C8B','#8C5CFF','#3B9BFF','#2CC66F','#C8D82C','#FFD028'];
+      inner = `<svg width="${size*.78}" height="${size*.78}" viewBox="0 0 100 100">${cols.map((c,i)=>`<ellipse cx="50" cy="29" rx="12" ry="21" fill="${c}" opacity="${DARK?.75:.85}" transform="rotate(${i*45} 50 50)" style="mix-blend-mode:${DARK?'screen':'multiply'}"/>`).join('')}</svg>`;
+    }
+    return `<div class="ic" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${bg}">${inner}</div>`;
+  }
+  if (DARK) { bg = darkBg; cut = '#232326'; glyph = a[1]; }
+  else { bg = `linear-gradient(180deg,${a[1]},${a[2]})`; cut = a[2]; glyph = '#fff'; }
+  return `<div class="ic" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${bg};--c:${cut};color:${glyph}"><svg viewBox="0 0 24 24" width="${size*.6}" height="${size*.6}">${GL[a[0]]}</svg></div>`;
+}
+
+function folderIcon(apps, size) {
+  const r = Math.round(size * 0.235), pad = size * .12, gap = size * .05;
+  const mini = (size - pad * 2 - gap * 2) / 3;
+  const bg = DARK ? '#2A2A2E' : '#E4E6EC';
+  return `<div class="ic" style="width:${size}px;height:${size}px;border-radius:${r}px;background:${bg};box-shadow:none;display:grid;grid-template-columns:repeat(3,${mini}px);gap:${gap}px;padding:${pad}px;align-content:start">${apps.slice(0,9).map(n=>icon(n,mini)).join('')}</div>`;
+}
+
+function cell(x, y, w, name, size, label = name, folder = null) {
+  return `<div class="cell" style="left:${x}px;top:${y}px;width:${w}px">${folder ? folderIcon(folder, size) : icon(name, size)}<div class="label">${label}</div></div>`;
+}
+
+// ---------- wallpaper (original wave design) ----------
+function wallpaper() {
+  const pal = DARK
+    ? { bg: ['#090D1C', '#160E2A'], waves: [['#1B2D6B','#13204D'], ['#3A1F78','#281556'], ['#6B1D57','#4C143E'], ['#7A2E1D','#561F13'], ['#0F4E5C','#0A3640']] }
+    : { bg: ['#E8F1FF', '#FCEFF7'], waves: [['#BFE0FF','#A6D1FF'], ['#D8CCFF','#C5B5FF'], ['#FFC9E2','#FFB3D5'], ['#FFD9B8','#FFC89C'], ['#C6F0E2','#A9E6D1']] };
+  let paths = '';
+  pal.waves.forEach((c, i) => {
+    const base = H * (0.18 + i * 0.17), amp = H * 0.05, f = 1.4 + i * .15, ph = i * 1.3;
+    let d = `M0 ${H}`;
+    for (let x = 0; x <= W; x += 16) {
+      const y = base + amp * Math.sin(x / W * Math.PI * f + ph) - (x / W) * H * 0.12;
+      d += ` L${x} ${y.toFixed(1)}`;
+    }
+    d += ` L${W} ${H} Z`;
+    paths += `<linearGradient id="g${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient><path d="${d}" fill="url(#g${i})"/>`;
+  });
+  return `<svg class="abs" style="left:0;top:0" width="${W}" height="${H}"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${pal.bg[0]}"/><stop offset="1" stop-color="${pal.bg[1]}"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#bg)"/>${paths}</svg>`;
+}
+
+function statusBar(extra = '') {
+  return `<div class="statusbar"><div>9:41&nbsp;&nbsp;Fri Nov 27</div><div class="sb-r">${extra}
+    <svg width="17" height="13" viewBox="0 0 17 13"><path d="M8.5 12.5l2.4-2.9a3.7 3.7 0 0 0-4.8 0zM8.5 3a9.6 9.6 0 0 1 7.3 3.3l1.2-1.5A11.6 11.6 0 0 0 8.5 1 11.6 11.6 0 0 0 0 4.8l1.2 1.5A9.6 9.6 0 0 1 8.5 3zm0 3.3a6.3 6.3 0 0 1 4.6 2l1.2-1.4a8.3 8.3 0 0 0-11.6 0l1.2 1.4a6.3 6.3 0 0 1 4.6-2z" fill="currentColor"/></svg>
+    <span>82%</span><svg width="26" height="13" viewBox="0 0 26 13"><rect x=".5" y=".5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2.5" y="2.5" width="15" height="8" rx="2" fill="currentColor"/><rect x="23.5" y="4.5" width="2" height="4" rx="1" fill="currentColor" opacity=".45"/></svg></div></div>`;
+}
+
+function libraryButton(size) {
+  const bg = DARK ? '#2A2A2E' : '#E4E6EC';
+  const m = size * .26, g = size * .08;
+  const cols = ['#4A90FF', '#4ADE80', '#FF9A3D', '#FF6B8A'];
+  return `<div class="ic" style="width:${size}px;height:${size}px;border-radius:${size*.235}px;background:${bg};box-shadow:none;display:grid;grid-template-columns:${m}px ${m}px;gap:${g}px;align-content:center;justify-content:center">${cols.map(c=>`<div style="width:${m}px;height:${m}px;border-radius:${m*.3}px;background:${c}"></div>`).join('')}</div>`;
+}
+
+function dock(pinned, recents, size, y) {
+  const html = `<div class="dock">${pinned.map(n=>icon(n,size)).join('')}<div class="sep"></div>${recents.map(n=>icon(n,size)).join('')}${libraryButton(size)}</div>`;
+  return `<div class="abs" style="left:0;right:0;top:${y}px;display:flex;justify-content:center">${html}</div>`;
+}
+
+function pageDots(y, count, active) {
+  let d = '';
+  for (let i = 0; i < count; i++) {
+    const on = i === active;
+    const c = DARK ? (on ? '#fff' : 'rgba(255,255,255,.35)') : (on ? '#1C1C1E' : 'rgba(28,28,30,.25)');
+    d += i === 0 ? `<svg width="10" height="10" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2" fill="${c}"/><rect x="13" y="3" width="8" height="8" rx="2" fill="${c}"/><rect x="3" y="13" width="18" height="8" rx="2" fill="${c}"/></svg>`
+      : i === count - 1 ? `<svg width="10" height="10" viewBox="0 0 24 24"><rect x="2" y="2" width="9" height="9" rx="2.5" fill="${c}"/><rect x="13" y="2" width="9" height="9" rx="2.5" fill="${c}"/><rect x="2" y="13" width="9" height="9" rx="2.5" fill="${c}"/><rect x="13" y="13" width="9" height="9" rx="2.5" fill="${c}"/></svg>`
+      : `<div style="width:7px;height:7px;border-radius:4px;background:${c}"></div>`;
+  }
+  return `<div class="abs" style="left:0;right:0;top:${y}px;display:flex;justify-content:center;align-items:center;gap:9px">${d}</div>`;
+}
+
+// ---------- widgets ----------
+function clockHeader(x, y, big = 78) {
+  return `<div class="abs" style="left:${x}px;top:${y}px;color:var(--text)"><div style="font-size:${big}px;font-weight:300;letter-spacing:-.02em;line-height:1">9:41</div><div style="font-size:17px;font-weight:500;margin-top:8px;opacity:.85">Friday, November 27</div></div>`;
+}
+function wUpNext(x, y, w, h) {
+  return `<div class="card abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;padding:16px 18px">
+    <div class="card-h"><span class="dot" style="background:#FF3B30"></span>Up next</div>
+    <div style="margin-top:12px;display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:#FF3B30"></div><div><div style="font-size:15px;font-weight:600">Team sync</div><div style="font-size:13px;color:var(--text2);margin-top:2px">10:30 – 11:00 AM</div></div></div>
+    <div style="margin-top:10px;display:flex;gap:10px"><div style="width:3px;border-radius:2px;background:#2F6BFF"></div><div><div style="font-size:15px;font-weight:600">Dentist appointment</div><div style="font-size:13px;color:var(--text2);margin-top:2px">2:00 PM · Main St Clinic</div></div></div></div>`;
+}
+function weatherGlyph(kind, s) {
+  if (kind === 'sun') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="#FFB800"/>${[...Array(8)].map((_,i)=>`<rect x="11.2" y="1.5" width="1.6" height="3.2" rx=".8" fill="#FFB800" transform="rotate(${i*45} 12 12)"/>`).join('')}</svg>`;
+  if (kind === 'rain') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M7 15a4 4 0 0 1-.4-8 5 5 0 0 1 9.6-.3A4.2 4.2 0 0 1 16.4 15z" fill="${DARK?'#9AA3B2':'#AEB7C6'}"/><path d="M8 17.5l-1 2.5M12 17.5l-1 2.5M16 17.5l-1 2.5" stroke="#3B9BFF" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+  if (kind === 'moon') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M15.5 3.5a8.5 8.5 0 1 0 5 13.6A7 7 0 0 1 15.5 3.5z" fill="#C9B8FF"/></svg>`;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="9" cy="9" r="4.2" fill="#FFB800"/><path d="M8 19a4.3 4.3 0 0 1-.4-8.6 5.3 5.3 0 0 1 10.2-.3A4.5 4.5 0 0 1 17.3 19z" fill="${DARK?'#C7CDD8':'#DCE3EE'}" stroke="${DARK?'#1C1C1E':'#fff'}" stroke-width=".6"/></svg>`;
+}
+function wWeather(x, y, w, h, big = false, compact = false) {
+  const hours = [['Now','part',18],['11AM','sun',19],['12PM','sun',21],['1PM','part',21],['2PM','part',20],['3PM','rain',17],['4PM','rain',16]].slice(0, big ? 7 : 6);
+  return `<div class="card abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;padding:16px 18px;overflow:hidden">
+    <div class="card-h">${weatherGlyph('part', 13)} Weather</div>
+    <div class="row" style="justify-content:space-between;margin-top:8px">
+      <div><div style="font-size:15px;font-weight:600">New York</div><div style="font-size:${big?56:44}px;font-weight:300;line-height:1.05">18°</div></div>
+      <div style="text-align:right">${weatherGlyph('part', big?52:40)}<div style="font-size:13px;font-weight:600;margin-top:2px">Partly cloudy</div><div style="font-size:12.5px;color:var(--text2)">H:21° L:12°</div></div></div>
+    ${compact ? '' : `<div class="row" style="justify-content:space-between;margin-top:${big?16:10}px;padding-top:${big?14:10}px;border-top:1px solid var(--line)">
+      ${hours.map(h=>`<div style="text-align:center;font-size:12px"><div style="color:var(--text2);font-weight:600">${h[0]}</div><div style="margin:5px 0">${weatherGlyph(h[1],20)}</div><div style="font-weight:600">${h[2]}°</div></div>`).join('')}</div>`}
+    ${big ? `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line)">${[['Sat','sun',22,13],['Sun','part',20,12],['Mon','rain',16,10]].map(d=>`<div class="row" style="justify-content:space-between;font-size:14px;padding:5px 0"><span style="width:44px;font-weight:600">${d[0]}</span>${weatherGlyph(d[1],20)}<span style="color:var(--text2);width:34px;text-align:right">${d[3]}°</span><div style="width:110px;height:5px;border-radius:3px;background:linear-gradient(90deg,#5BC0FF,#FFC23A)"></div><span style="width:34px;text-align:right;font-weight:600">${d[2]}°</span></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+function wWorld(x, y, w, h) {
+  const cities = [['London','2:41','PM','+5H'],['Dubai','6:41','PM','+9H'],['Tokyo','11:41','PM','+14H'],['Sydney','1:41','AM','Tomorrow']];
+  return `<div class="card abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;padding:16px 18px">
+    <div class="card-h">World clock</div>
+    <div class="row" style="justify-content:space-between;margin-top:12px">${cities.map(c=>`<div><div style="font-size:12px;color:var(--text2);font-weight:600">${c[3]}</div><div style="font-size:21px;font-weight:500;margin-top:2px">${c[1]}<span style="font-size:11px;font-weight:600;margin-left:2px">${c[2]}</span></div><div style="font-size:13px;font-weight:600;margin-top:1px">${c[0]}</div></div>`).join('')}</div></div>`;
+}
+function wBattery(x, y, w, h) {
+  const ring = (pct, color, label, glyph) => `<div style="text-align:center"><svg width="62" height="62" viewBox="0 0 62 62"><circle cx="31" cy="31" r="26" fill="none" stroke="var(--card2)" stroke-width="6"/><circle cx="31" cy="31" r="26" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${2*Math.PI*26*pct/100} 999" transform="rotate(-90 31 31)"/><g transform="translate(19 19)" style="color:var(--text)">${glyph}</g></svg><div style="font-size:14px;font-weight:600;margin-top:4px">${pct}%</div><div style="font-size:12px;color:var(--text2)">${label}</div></div>`;
+  const tab = `<svg width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
+  const pen = `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 19l1-4L16 5l3 3L9 18z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+  const head = `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="4" height="6" rx="1.5" fill="currentColor"/><rect x="17" y="14" width="4" height="6" rx="1.5" fill="currentColor"/></svg>`;
+  return `<div class="card abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;padding:16px 18px">
+    <div class="card-h">Batteries</div><div class="row" style="justify-content:space-around;margin-top:12px">${ring(82,'#34C759','Tablet',tab)}${ring(64,'#34C759','Pen',pen)}${ring(23,'#FF9F0A','Earbuds',head)}</div></div>`;
+}
+function searchPill(x, y, w, h, text, big = false) {
+  const mag = `<svg width="${big?22:18}" height="${big?22:18}" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  const mic = `<svg width="22" height="22" viewBox="0 0 24 24" style="color:var(--accent)">${GL.mic}</svg>`;
+  const lens = `<svg width="22" height="22" viewBox="0 0 24 24" style="color:var(--accent)"><path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`;
+  return `<div class="pill abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;padding:0 ${big?22:16}px;border-radius:${h/2}px;font-size:${big?17:15}px">${mag}<span style="flex:1">${text}</span>${big ? mic + lens : ''}</div>`;
+}
+
+// ---------- screens ----------
+const HOME_APPS = ['Calendar','Clock','Weather','Maps','Store','Camera',
+                   'Notes','Docs','Calculator','Translate','Books','Podcasts',
+                   'Meet','Social','Wallet','Shop','Fitness','Sketch',
+                   'TV','Reader','Explore','Contacts','Downloads','Recorder',
+                   'F:Work','F:Games'];
+const FOLDERS = { 'Work': ['Docs','Mail','Meet','Notes','Calendar','Files','Calculator','Translate'], 'Games': ['Games','Explore','Sketch','Reader','Music','TV'] };
+const DOCK_PINNED = ['Browser','Mail','Messages','Video','Music','Photos','Files','Notes','Settings'];
+const DOCK_RECENT = ['MovieBox','Maps','Games'];
+
+function screenHome() {
+  let h = wallpaper() + statusBar();
+  if (LAND) {
+    h += clockHeader(48, 54);
+    h += wUpNext(40, 172, 332, 132);
+    h += wWeather(40, 316, 332, 212);
+    h += wWorld(40, 540, 332, 112);
+    const gx = 404, gy = 46, cw = 140, ch = 118, size = 66;
+    HOME_APPS.forEach((n, i) => {
+      const c = i % 6, r = Math.floor(i / 6);
+      const x = gx + c * cw, y = gy + r * ch;
+      h += n.startsWith('F:') ? cell(x, y, cw, null, size, n.slice(2), FOLDERS[n.slice(2)]) : cell(x, y, cw, n, size);
+    });
+    h += pageDots(668, 4, 1);
+    h += dock(DOCK_PINNED, DOCK_RECENT, 58, 694);
+  } else {
+    h += clockHeader(40, 56, 72);
+    h += wUpNext(32, 176, 236, 160);
+    h += wWeather(282, 176, 250, 160, false, true);
+    h += `<div class="card abs" style="left:546px;top:176px;width:222px;height:160px;padding:16px 18px"><div class="card-h">Batteries</div>
+      <div style="margin-top:14px;font-size:14px">${[['Tablet',82,'#34C759'],['Pen',64,'#34C759'],['Earbuds',23,'#FF9F0A']].map(b=>`<div style="margin-bottom:10px"><div class="row" style="justify-content:space-between;font-weight:600"><span>${b[0]}</span><span>${b[1]}%</span></div><div style="height:6px;border-radius:3px;background:var(--card2);margin-top:4px"><div style="width:${b[1]}%;height:6px;border-radius:3px;background:${b[2]}"></div></div></div>`).join('')}</div></div>`;
+    const gx = 24, gy = 372, cw = 150, ch = 140, size = 72;
+    HOME_APPS.slice(0, 25).forEach((n, i) => {
+      const c = i % 5, r = Math.floor(i / 5);
+      const x = gx + c * cw, y = gy + r * ch;
+      h += n.startsWith('F:') ? cell(x, y, cw, null, size, n.slice(2), FOLDERS[n.slice(2)]) : cell(x, y, cw, n, size);
+    });
+    h += pageDots(1100 + 46, 4, 1);
+    h += dock(['Browser','Mail','Messages','Video','Photos','Files'], ['MovieBox','Maps'], 56, 1176);
+  }
+  return h;
+}
+
+function screenToday() {
+  let h = `<div class="abs" style="inset:0;background:var(--page)"></div>` + statusBar();
+  h += `<div class="abs" style="left:64px;top:50px;color:var(--text)"><div style="font-size:14px;font-weight:600;color:var(--text2);letter-spacing:.04em;text-transform:uppercase">Friday, November 27</div><div style="font-size:34px;font-weight:700;margin-top:4px">Good morning</div></div>`;
+  h += searchPill(64, 140, 1152, 60, 'Search the web, your apps and the Play Store', true);
+  h += wWeather(64, 224, 360, 350, true);
+  h += wUpNext(64, 590, 360, 150);
+  // news feed
+  const news = [
+    ['Global markets rise as tech shares lead a broad rally', 'The Daily Ledger', '18 min ago', 'Business'],
+    ['New tablet chips promise longer battery life and faster AI tasks', 'TechWire', '42 min ago', 'Technology'],
+    ['City council approves expanded weekend public transit service', 'Metro Report', '1 hr ago', 'Local'],
+    ['Researchers map a deep-sea reef never seen before', 'Science Today', '2 hr ago', 'Science'],
+    ['Championship final set after dramatic late comeback', 'Sports Desk', '3 hr ago', 'Sports'],
+    ['Five simple habits that improve sleep, according to doctors', 'Health Notes', '4 hr ago', 'Health'],
+  ];
+  const nx = 444, nw = 772;
+  h += `<div class="card abs" style="left:${nx}px;top:224px;width:${nw}px;height:516px;padding:18px 22px;overflow:hidden">
+    <div class="row" style="justify-content:space-between"><div style="font-size:20px;font-weight:700">Top stories</div><div style="font-size:13px;color:var(--accent);font-weight:600">From Google News</div></div>
+    <div class="row" style="gap:8px;margin-top:12px">${['For you','World','Business','Technology','Sports','Entertainment','Science','Health'].map((c,i)=>`<div class="chip ${i==0?'on':''}">${c}</div>`).join('')}</div>
+    <div style="margin-top:10px">${news.map((n,i)=>`<div class="row" style="gap:16px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}">
+        <div style="width:64px;height:52px;border-radius:12px;flex:none;background:linear-gradient(135deg,${['#7CB8FF','#B497FF','#7BE0B8','#FFB27A','#FF8FB1','#8FD3FF'][i]},${['#3D7BFF','#7C55F5','#2BB38A','#FF7A3D','#F2557F','#3BA7F0'][i]});opacity:${DARK?.8:1}"></div>
+        <div style="flex:1"><div style="font-size:12px;color:var(--text2);font-weight:600">${n[1]} · ${n[2]}</div><div style="font-size:16px;font-weight:600;margin-top:3px;line-height:1.3">${n[0]}</div></div>
+        <div style="font-size:20px;color:var(--text2)">⋮</div></div>`).join('')}</div></div>`;
+  h += `<div class="abs" style="left:0;right:0;top:756px;display:flex;justify-content:center;gap:10px"><div class="chip" style="background:var(--card);box-shadow:var(--shadow)">＋ Add widget</div><div class="chip" style="background:var(--card);box-shadow:var(--shadow)">Edit</div></div>`;
+  return h;
+}
+
+function libTile(x, y, size, title, apps) {
+  const pad = 16, gap = 12, big = (size - pad * 2 - gap) / 2, small = (big - 8) / 2;
+  const q4 = apps.length > 4
+    ? `<div style="display:grid;grid-template-columns:${small}px ${small}px;gap:8px">${apps.slice(3,7).map(a=>icon(a,small)).join('')}</div>`
+    : icon(apps[3], big);
+  return `<div class="abs" style="left:${x}px;top:${y}px;width:${size}px">
+    <div style="width:${size}px;height:${size}px;border-radius:34px;background:var(--card);box-shadow:var(--shadow);padding:${pad}px;display:grid;grid-template-columns:${big}px ${big}px;gap:${gap}px">
+      ${apps.slice(0,3).map(a=>icon(a,big)).join('')}${q4}</div>
+    <div style="text-align:center;font-size:13.5px;font-weight:600;color:var(--text);margin-top:9px">${title}</div></div>`;
+}
+
+function screenLibrary() {
+  let h = `<div class="abs" style="inset:0;background:var(--page)"></div>` + statusBar();
+  h += searchPill(W/2 - 230, 52, 460, 46, 'App Library');
+  const tiles = [
+    ['Suggestions', ['Messages','MovieBox','Browser','Maps','Video','Music','Notes']],
+    ['Recently Added', ['MovieBox','Sketch','Wallet','Reader','Translate','Recorder']],
+    ['Productivity & Finance', ['Docs','Mail','Calendar','Wallet','Notes','Calculator','Meet']],
+    ['Social', ['Messages','Social','Meet','Contacts','Mail']],
+    ['Utilities', ['Settings','Files','Clock','Calculator','Downloads','Recorder','Contacts']],
+    ['Creativity', ['Photos','Camera','Sketch','Recorder']],
+    ['Entertainment', ['Video','MovieBox','Music','TV','Podcasts','Games']],
+    ['Information & Reading', ['Browser','Books','Weather','Reader','Translate','Explore']],
+    ['Games', ['Games','Explore','Sketch','Reader']],
+    ['Health & Fitness', ['Fitness','Clock','Notes','Music']],
+    ['Shopping & Food', ['Shop','Wallet','Store','Maps']],
+    ['Travel', ['Maps','Explore','Weather','Translate']],
+  ];
+  const size = 196, gapX = 52, cols = 4, x0 = (W - (cols * size + (cols - 1) * gapX)) / 2;
+  tiles.forEach((t, i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    h += libTile(x0 + c * (size + gapX), 124 + r * 254, size, t[0], t[1]);
+  });
+  h += dock(DOCK_PINNED, DOCK_RECENT, 58, 694);
+  return h;
+}
+
+function screenSearch() {
+  let h = `<div class="abs" style="inset:0;background:var(--page)"></div>` + statusBar();
+  const cx = W / 2, cw = 760, x = cx - cw / 2;
+  h += `<div class="pill abs" style="left:${x}px;top:48px;width:${cw - 90}px;height:52px;padding:0 18px;border-radius:26px;color:var(--text);font-size:18px">
+    <svg width="20" height="20" viewBox="0 0 24 24" style="color:var(--text2)"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <span>weather<span style="display:inline-block;width:2px;height:22px;background:var(--accent);vertical-align:-4px;margin-left:1px"></span></span><span style="flex:1"></span>
+    <svg width="22" height="22" viewBox="0 0 24 24" style="color:var(--text2)">${GL.mic}</svg></div>
+    <div class="abs" style="left:${x + cw - 74}px;top:63px;font-size:17px;font-weight:600;color:var(--accent)">Cancel</div>`;
+  // apps
+  h += `<div class="card abs" style="left:${x}px;top:120px;width:${cw}px;height:136px;padding:14px 18px">
+    <div class="card-h">Apps</div><div class="row" style="gap:6px;margin-top:10px">
+    ${['Weather','Clock','Maps'].map(n=>`<div style="width:92px;display:flex;flex-direction:column;align-items:center">${icon(n,58)}<div class="label">${n}</div></div>`).join('')}</div></div>`;
+  // web suggestions
+  const sug = ['weather today', 'weather tomorrow', 'weather radar', 'weather forecast 10 day'];
+  h += `<div class="card abs" style="left:${x}px;top:272px;width:${cw}px;padding:8px 18px 6px">
+    <div class="card-h" style="padding:8px 0 4px">Search Google</div>
+    ${sug.map((s,i)=>`<div class="row" style="gap:14px;height:44px;${i?'border-top:1px solid var(--line)':''}"><svg width="18" height="18" viewBox="0 0 24 24" style="color:var(--text2)"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span style="flex:1;font-size:16px;color:var(--text)"><b>weather</b>${s.slice(7)}</span><span style="color:var(--text2);font-size:18px">↖</span></div>`).join('')}</div>`;
+  // play store
+  h += `<div class="card abs" style="left:${x}px;top:502px;width:${cw}px;height:54px;padding:0 18px" ><div class="row" style="height:54px;gap:14px">${icon('Store',36)}<span style="flex:1;font-size:16px;color:var(--text)">Search <b>“weather”</b> on the Play Store</span><span style="color:var(--text2);font-size:20px">›</span></div></div>`;
+  // keyboard
+  const rows = ['qwertyuiop','asdfghjkl','zxcvbnm'];
+  const kTop = H - 232;
+  h += `<div class="kbd abs" style="left:0;right:0;top:${kTop}px;bottom:0;padding:12px 60px">
+    ${rows.map((r,i)=>`<div class="row" style="gap:8px;justify-content:center;margin-bottom:8px">${i==2?'<div class="key mod" style="width:110px">⇧</div>':''}${r.split('').map(k=>`<div class="key" style="width:92px">${k}</div>`).join('')}${i==0?'<div class="key mod" style="width:110px">⌫</div>':''}${i==1?'<div class="key mod" style="width:140px;background:var(--accent);color:#fff">Search</div>':''}${i==2?'<div class="key mod" style="width:110px">⇧</div>':''}</div>`).join('')}
+    <div class="row" style="gap:8px;justify-content:center"><div class="key mod" style="width:120px">?123</div><div class="key mod" style="width:70px">☺</div><div class="key" style="width:620px"></div><div class="key mod" style="width:70px">.</div><div class="key mod" style="width:120px">?123</div></div></div>`;
+  return h;
+}
+
+root.innerHTML = ({ home: screenHome, today: screenToday, library: screenLibrary, search: screenSearch })[S]();
+document.body.dataset.ready = '1';
+</script>
+</body>
+</html>
