@@ -153,7 +153,7 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
     fun launch(app: AppInfo, bounds: Rect?, rootView: android.view.View?) {
         try {
             val opts: Bundle? = if (bounds != null && rootView != null) {
-                ActivityOptions.makeClipRevealAnimation(rootView, bounds.left, bounds.top, bounds.width(), bounds.height()).toBundle()
+                ActivityOptions.makeScaleUpAnimation(rootView, bounds.left, bounds.top, bounds.width(), bounds.height()).toBundle()
             } else null
             launcherApps.startMainActivity(app.component, app.user, bounds, opts)
         } catch (e: Exception) {

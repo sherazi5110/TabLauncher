@@ -400,6 +400,28 @@ private fun LayoutTab() {
         SwitchRow("Recent apps in Dock", "Shows your last used apps after the divider", st.dockRecents) { set(Settings.DOCK_RECENTS, it) }
         SwitchRow("Add new apps to Home Screen", null, st.addNewApps) { set(Settings.ADD_NEW, it) }
     }
+    SectionTitle("Home pages")
+    val pages = ctl.packed
+    Group {
+        pages.forEachIndexed { i, page ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Page ${i + 1}", color = LocalColors.current.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("${page.size} item${if (page.size == 1) "" else "s"}" + if (i == 0 && st.homeWidgets) " · with widgets" else "",
+                        color = LocalColors.current.text2, fontSize = 12.5.sp)
+                }
+                if (page.isNotEmpty() && (pages.size > 1 || i > 0)) {
+                    Text("Remove", color = Color(0xFFFF3B30), fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                            ctl.app.layout.removeHomeItems(page.map { it.item.id }.toSet())
+                        }.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+            }
+        }
+    }
+    Text("Removing a page takes its apps off the Home Screen. They stay in the App Library, and you can add them back from there.",
+        color = LocalColors.current.text2, fontSize = 12.5.sp, modifier = Modifier.padding(top = 6.dp))
+
     SectionTitle("Pages")
     Segmented(listOf(false, true), st.libraryOnLeft, { if (it) "App Library on left" else "App Library on right" }) { set(Settings.LIBRARY_LEFT, it) }
     Spacer(Modifier.height(12.dp))

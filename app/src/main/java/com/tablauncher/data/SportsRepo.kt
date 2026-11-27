@@ -32,17 +32,18 @@ class SportsRepo(private val settings: Settings) {
     private val fetchedAt = mutableMapOf<String, Long>()
 
     suspend fun refresh(force: Boolean = false) = coroutineScope {
-        settings.current.sportsLeagues.map { id ->
-            async {
-                val now = System.currentTimeMillis()
-                val live = _matches.value[id]?.any { it.state == MatchState.LIVE } == true
-                val maxAge = if (live) 60_000L else 5 * 60_000L
-                if (!force && now - (fetchedAt[id] ?: 0L) < maxAge) return@async
-                val list = load(id) ?: return@async
-                fetchedAt[id] = now
-                _matches.value = _matches.value + (id to list)
-            }
-        }.awaitAll()
+        settings.current.sportsLeagues.map { id -> async { ensure(id, force) } }.awaitAll()
+    }
+
+    /** Loads one league's scores if they are missing or old (every minute while a match is live). */
+    suspend fun ensure(id: String, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val live = _matches.value[id]?.any { it.state == MatchState.LIVE } == true
+        val maxAge = if (live) 60_000L else 5 * 60_000L
+        if (!force && now - (fetchedAt[id] ?: 0L) < maxAge) return
+        val list = load(id) ?: return
+        fetchedAt[id] = now
+        _matches.value = _matches.value + (id to list)
     }
 
     private suspend fun load(id: String): List<Match>? {
@@ -169,5 +170,11 @@ class SportsRepo(private val settings: Settings) {
         )
 
         fun league(id: String) = leagues.firstOrNull { it.id == id }
+
+        /** Sport name to the emoji used on its button. */
+        val sports = listOf(
+            "Football" to "⚽", "Cricket" to "🏏", "Basketball" to "🏀",
+            "American Football" to "🏈", "Baseball" to "⚾", "Ice Hockey" to "🏒",
+        )
     }
 }

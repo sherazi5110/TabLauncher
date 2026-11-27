@@ -86,6 +86,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
+private val popIn = fadeIn(tween(160)) +
+    androidx.compose.animation.scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 500f), initialScale = 0.92f)
+private val popOut = fadeOut(tween(130)) + androidx.compose.animation.scaleOut(tween(130), targetScale = 0.96f)
+
 private class WallpaperImage(val image: ImageBitmap?, val isDark: Boolean)
 
 @Composable
@@ -163,7 +167,9 @@ fun LauncherRoot(ctl: LauncherController) {
         val layout by ctl.app.layout.layout.collectAsState()
         val byKey by ctl.app.apps.byKey.collectAsState()
         val dragging = ctl.drag.session != null
-        val homeCount = m.pageCount(layout.home.size) + if (dragging) 1 else 0
+        val packed = remember(layout.home, m.cols, m.rows, m.firstRows) { packHome(layout.home, m.cols, m.firstRows, m.rows) }
+        ctl.packed = packed
+        val homeCount = packed.size + if (dragging) 1 else 0
         val pages = remember(homeCount, s.libraryOnLeft) {
             buildList {
                 add(if (s.libraryOnLeft) Page.Library else Page.Today)
@@ -218,7 +224,11 @@ fun LauncherRoot(ctl: LauncherController) {
             }
         }
 
-        val customize by animateFloatAsState(if (ctl.customizeOpen) 1f else 0f, tween(320), label = "customize")
+        val customize by animateFloatAsState(
+            if (ctl.customizeOpen) 1f else 0f,
+            androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 260f),
+            label = "customize",
+        )
         val panelW = min(600.dp, maxWidth * 0.46f)
         val previewScale = 1f - (1f - ((maxWidth - panelW - 48.dp) / maxWidth)) * customize
 
@@ -305,7 +315,7 @@ fun LauncherRoot(ctl: LauncherController) {
                                             )
                                         }
                                 ) {
-                                    HomePage(p.index, m, layout.home, byKey)
+                                    HomePage(p.index, m, packed.getOrNull(p.index).orEmpty(), byKey)
                                 }
                             }
                         }
@@ -339,8 +349,8 @@ fun LauncherRoot(ctl: LauncherController) {
                     AnimatedVisibility(
                         visible = ctl.customizeOpen,
                         modifier = Modifier.align(Alignment.CenterEnd),
-                        enter = slideInHorizontally { it },
-                        exit = slideOutHorizontally { it },
+                        enter = slideInHorizontally(androidx.compose.animation.core.spring(dampingRatio = 0.86f, stiffness = 260f)) { it },
+                        exit = slideOutHorizontally(tween(220)) { it },
                     ) {
                         CustomizePanel(Modifier.width(panelW).fillMaxHeight())
                     }
@@ -355,8 +365,13 @@ fun LauncherRoot(ctl: LauncherController) {
                         }
                     }
 
-                    ctl.openFolder?.let { FolderOverlay(it) }
-                    ctl.openCategory?.let { CategoryOverlay(it) }
+                    // Folders, categories and menus grow in smoothly instead of popping.
+                    var lastFolder by remember { mutableStateOf<String?>(null) }
+                    if (ctl.openFolder != null) lastFolder = ctl.openFolder
+                    AnimatedVisibility(ctl.openFolder != null, enter = popIn, exit = popOut) { lastFolder?.let { FolderOverlay(it) } }
+                    var lastCategory by remember { mutableStateOf<CategoryView?>(null) }
+                    if (ctl.openCategory != null) lastCategory = ctl.openCategory
+                    AnimatedVisibility(ctl.openCategory != null, enter = popIn, exit = popOut) { lastCategory?.let { CategoryOverlay(it) } }
                     AnimatedVisibility(
                         visible = ctl.searchOpen,
                         enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { -it / 12 },
@@ -365,7 +380,9 @@ fun LauncherRoot(ctl: LauncherController) {
                         SearchScreen()
                     }
                     ctl.widgetPicker?.let { WidgetPicker(it) }
-                    ctl.menu?.let { MenuPopup(it) }
+                    var lastMenu by remember { mutableStateOf<MenuState?>(null) }
+                    if (ctl.menu != null) lastMenu = ctl.menu
+                    AnimatedVisibility(ctl.menu != null, enter = popIn, exit = popOut) { lastMenu?.let { MenuPopup(it) } }
                     ctl.renameFolder?.let { RenameFolderDialog(it) }
                 }
             }

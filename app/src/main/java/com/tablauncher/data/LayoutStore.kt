@@ -34,6 +34,9 @@ class LayoutStore(context: Context) {
 
     fun removeHomeItem(id: String) = update { l -> l.copy(home = l.home.filterNot { it.id == id }) }
 
+    /** Removes a whole Home page; its apps stay in the App Library. */
+    fun removeHomeItems(ids: Set<String>) = update { l -> l.copy(home = l.home.filterNot { it.id in ids }) }
+
     fun addToHome(key: String, index: Int? = null) = update { l ->
         if (key in l.homeKeys()) return@update l
         val list = l.home.toMutableList()
@@ -93,6 +96,10 @@ class LayoutStore(context: Context) {
         }
         if (placeOnHome) list.add((idx + 1).coerceAtMost(list.size), HomeItem.App(key))
         l.copy(home = list)
+    }
+
+    fun resizeFolder(fid: String, w: Int, h: Int) = update { l ->
+        l.copy(home = l.home.map { if (it is HomeItem.Folder && it.fid == fid) it.copy(w = w, h = h) else it })
     }
 
     fun ungroupFolder(fid: String) = update { l ->
@@ -209,7 +216,8 @@ class LayoutStore(context: Context) {
                 home = o.optJSONArray("home").objects().mapNotNull { h ->
                     when (h.optString("t")) {
                         "app" -> HomeItem.App(h.getString("k"))
-                        "folder" -> HomeItem.Folder(h.getString("id"), h.optString("name", "Folder"), h.getJSONArray("apps").strings())
+                        "folder" -> HomeItem.Folder(h.getString("id"), h.optString("name", "Folder"), h.getJSONArray("apps").strings(),
+                            h.optInt("w", 1), h.optInt("h", 1))
                         else -> null
                     }
                 },
@@ -237,7 +245,7 @@ class LayoutStore(context: Context) {
                     when (h) {
                         is HomeItem.App -> JSONObject().put("t", "app").put("k", h.key)
                         is HomeItem.Folder -> JSONObject().put("t", "folder").put("id", h.fid).put("name", h.name)
-                            .put("apps", JSONArray(h.apps))
+                            .put("apps", JSONArray(h.apps)).put("w", h.w).put("h", h.h)
                     }
                 )
             }

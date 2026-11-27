@@ -75,12 +75,48 @@ data class HomeMetrics(
 ) {
     /** In portrait the widgets take the top two rows of the first page. */
     val firstRows: Int get() = if (showWidgets && !landscape) (rows - 2).coerceAtLeast(1) else rows
-    val firstCap: Int get() = cols * firstRows
-    val cap: Int get() = cols * rows
+}
 
-    fun pageCount(items: Int): Int = if (items <= firstCap) 1 else 1 + (items - firstCap + cap - 1) / cap
-    fun pageStart(page: Int): Int = if (page == 0) 0 else firstCap + (page - 1) * cap
-    fun pageCapacity(page: Int): Int = if (page == 0) firstCap else cap
+/** An item placed on a Home page; big folders cover [w] x [h] cells. */
+data class Placed(val index: Int, val item: HomeItem, val col: Int, val row: Int, val w: Int, val h: Int)
+
+/** Lays Home items out page by page, in reading order, making room for big folders. */
+fun packHome(items: List<HomeItem>, cols: Int, firstRows: Int, rows: Int): List<List<Placed>> {
+    val pages = mutableListOf<List<Placed>>()
+    var pageRows = firstRows
+    var occ = Array(pageRows) { BooleanArray(cols) }
+    var cur = mutableListOf<Placed>()
+    var cursor = 0
+    fun fits(c: Int, r: Int, w: Int, h: Int): Boolean {
+        if (c + w > cols || r + h > pageRows) return false
+        for (y in r until r + h) for (x in c until c + w) if (occ[y][x]) return false
+        return true
+    }
+    for ((i, item) in items.withIndex()) {
+        var tries = 0
+        while (true) {
+            val w = ((item as? HomeItem.Folder)?.w ?: 1).coerceIn(1, cols)
+            val h = ((item as? HomeItem.Folder)?.h ?: 1).coerceIn(1, pageRows)
+            var pos = cursor
+            while (pos < cols * pageRows && !fits(pos % cols, pos / cols, w, h)) pos++
+            if (pos < cols * pageRows) {
+                val c = pos % cols
+                val r = pos / cols
+                for (y in r until r + h) for (x in c until c + w) occ[y][x] = true
+                cur += Placed(i, item, c, r, w, h)
+                cursor = pos + 1
+                break
+            }
+            pages += cur
+            cur = mutableListOf()
+            pageRows = rows
+            occ = Array(pageRows) { BooleanArray(cols) }
+            cursor = 0
+            if (++tries > 2) break
+        }
+    }
+    pages += cur
+    return pages
 }
 
 /** Holds a node's latest coordinates without causing recomposition. */
@@ -90,26 +126,23 @@ class CoordsHolder {
 }
 
 @Composable
-fun HomePage(index: Int, m: HomeMetrics, home: List<HomeItem>, apps: Map<String, AppInfo>) {
-    val start = m.pageStart(index)
-    val cap = m.pageCapacity(index)
-    val items = if (start < home.size) home.subList(start, (start + cap).coerceAtMost(home.size)) else emptyList()
+fun HomePage(index: Int, m: HomeMetrics, placed: List<Placed>, apps: Map<String, AppInfo>) {
     Box(Modifier.fillMaxSize().padding(start = m.hPad, end = m.hPad, top = m.topPad, bottom = m.bottomPad)) {
         if (index == 0 && m.showWidgets) {
             if (m.landscape) {
                 Row(Modifier.fillMaxSize()) {
                     HomeWidgetColumn(Modifier.width(m.widgetColumnWidth).fillMaxHeight())
                     Spacer(Modifier.width(24.dp))
-                    HomeGrid(index, start, m.cols, m.firstRows, items, apps, m, Modifier.weight(1f).fillMaxHeight())
+                    HomeGrid(index, m.cols, m.firstRows, placed, apps, m, Modifier.weight(1f).fillMaxHeight())
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
                     HomeWidgetRow(Modifier.fillMaxWidth().weight(2f))
-                    HomeGrid(index, start, m.cols, m.firstRows, items, apps, m, Modifier.fillMaxWidth().weight(m.firstRows.toFloat()))
+                    HomeGrid(index, m.cols, m.firstRows, placed, apps, m, Modifier.fillMaxWidth().weight(m.firstRows.toFloat()))
                 }
             }
         } else {
-            HomeGrid(index, start, m.cols, m.rows, items, apps, m, Modifier.fillMaxSize())
+            HomeGrid(index, m.cols, m.rows, placed, apps, m, Modifier.fillMaxSize())
         }
     }
 }
@@ -184,10 +217,9 @@ fun DoneEditingButton(modifier: Modifier = Modifier) {
 @Composable
 private fun HomeGrid(
     pageIndex: Int,
-    start: Int,
     cols: Int,
     rows: Int,
-    items: List<HomeItem>,
+    placed: List<Placed>,
     apps: Map<String, AppInfo>,
     m: HomeMetrics,
     modifier: Modifier,
@@ -196,19 +228,19 @@ private fun HomeGrid(
     val density = LocalDensity.current
     BoxWithConstraints(
         modifier.onGloballyPositioned { coords ->
-            ctl.drag.grids[pageIndex] = GridInfo(Rect(coords.positionInRoot(), coords.size.toSize()), cols, rows, start, cols * rows)
+            ctl.drag.grids[pageIndex] = GridInfo(Rect(coords.positionInRoot(), coords.size.toSize()), cols, rows, 0, cols * rows)
         }
     ) {
         val cellW = maxWidth / cols
         val cellH = maxHeight / rows
-        items.take(cols * rows).forEachIndexed { i, item ->
-            key(item.id) {
-                val col = i % cols
-                val row = i / cols
-                val target = with(density) { IntOffset((cellW * col).roundToPx(), (cellH * row).roundToPx()) }
-                val anim by animateIntOffsetAsState(target, spring(stiffness = 500f), label = "cell")
-                Box(Modifier.offset { anim }.size(cellW, cellH), contentAlignment = Alignment.Center) {
-                    HomeItemCell(item, apps, m.iconSize)
+        placed.forEach { p ->
+            key(p.item.id) {
+                val target = with(density) { IntOffset((cellW * p.col).roundToPx(), (cellH * p.row).roundToPx()) }
+                val anim by animateIntOffsetAsState(target, spring(dampingRatio = 0.8f, stiffness = 380f), label = "cell")
+                Box(Modifier.offset { anim }.size(cellW * p.w, cellH * p.h), contentAlignment = Alignment.Center) {
+                    val folder = p.item as? HomeItem.Folder
+                    if (folder != null && (p.w > 1 || p.h > 1)) BigFolder(folder, m.iconSize)
+                    else HomeItemCell(p.item, apps, m.iconSize)
                 }
             }
         }
@@ -400,6 +432,81 @@ fun PageDots(pages: List<Page>, current: Int, onSelect: (Int) -> Unit, modifier:
                         for (r in 0..1) Row(horizontalArrangement = Arrangement.spacedBy(1.5.dp)) {
                             Box(Modifier.size(4.dp).clip(RoundedCornerShape(1.dp)).background(color))
                             Box(Modifier.size(4.dp).clip(RoundedCornerShape(1.dp)).background(color))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A folder shown as a panel with its apps visible and tappable (resizable from its menu). */
+@Composable
+private fun BigFolder(folder: HomeItem.Folder, iconSize: Dp) {
+    val ctl = LocalController.current
+    val c = LocalColors.current
+    val haptic = LocalHapticFeedback.current
+    val byKey by ctl.app.apps.byKey.collectAsState()
+    val holder = remember { CoordsHolder() }
+    val dragging = (ctl.drag.session?.item as? DragItem.Home)?.item?.id == folder.id
+    val merge = ctl.drag.mergeTarget == folder.id
+    val scale by animateFloatAsState(if (merge) 1.04f else 1f, label = "merge")
+    val shape = RoundedCornerShape(28.dp)
+    val panel = if (c.dark) Color(0xFF1C1C22).copy(alpha = 0.62f) else Color.White.copy(alpha = 0.55f)
+    val text = if (c.dark) Color.White else Color(0xFF1C1C1E)
+    BoxWithConstraints(
+        Modifier
+            .padding(8.dp)
+            .fillMaxSize()
+            .alpha(if (dragging) 0f else 1f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(shape)
+            .background(panel)
+            .onGloballyPositioned { holder.coords = it }
+            .launcherGestures(
+                folder, ctl,
+                onTap = { ctl.openFolder = folder.fid },
+                onLongPress = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    holder.bounds()?.let { ctl.openMenu(MenuTarget.HomeFolder(folder), it) }
+                },
+                onDragStart = { id, local -> holder.coords?.let { ctl.startDrag(DragItem.Home(folder), id, it.localToRoot(local)) } },
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        val titleH = 34.dp
+        val icon = (iconSize * 0.78f).coerceAtMost(72.dp)
+        val gap = icon * 0.32f
+        val perRow = ((maxWidth + gap) / (icon + gap)).toInt().coerceAtLeast(1)
+        val rowsFit = ((maxHeight - titleH + gap) / (icon + gap)).toInt().coerceAtLeast(1)
+        val apps = folder.apps.mapNotNull { byKey[it] }
+        val capacity = perRow * rowsFit
+        val shown = if (apps.size > capacity) apps.take(capacity - 1) else apps
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
+            Text(folder.name, color = text, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                modifier = Modifier.height(titleH).padding(top = 4.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                shown.chunked(perRow).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        row.forEach { app ->
+                            val h = remember(app.key) { CoordsHolder() }
+                            AppIconImage(app, icon, Modifier.onGloballyPositioned { h.coords = it }.launcherGestures(
+                                app.key, ctl,
+                                onTap = { ctl.launch(app, h.bounds()) },
+                                onLongPress = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    h.bounds()?.let { ctl.openMenu(MenuTarget.FolderApp(folder.fid, app), it) }
+                                },
+                                onDragStart = { id, local ->
+                                    h.coords?.let { ctl.startDrag(DragItem.FolderApp(folder.fid, app.key), id, it.localToRoot(local)) }
+                                },
+                            ))
+                        }
+                        if (row === shown.chunked(perRow).last() && apps.size > capacity) {
+                            Box(Modifier.size(icon).clip(LocalIconShape.current).background(c.onWallpaper.copy(alpha = 0.15f))
+                                .clickable { ctl.openFolder = folder.fid }, contentAlignment = Alignment.Center) {
+                                Text("+${apps.size - shown.size}", color = text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            }
                         }
                     }
                 }

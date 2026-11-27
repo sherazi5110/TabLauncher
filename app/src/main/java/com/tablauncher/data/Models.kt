@@ -35,7 +35,8 @@ sealed class HomeItem {
         override val id: String get() = "a:$key"
     }
 
-    data class Folder(val fid: String, val name: String, val apps: List<String>) : HomeItem() {
+    /** [w] x [h] is how many grid cells the folder covers; 1x1 is a normal folder icon. */
+    data class Folder(val fid: String, val name: String, val apps: List<String>, val w: Int = 1, val h: Int = 1) : HomeItem() {
         override val id: String get() = "f:$fid"
     }
 }

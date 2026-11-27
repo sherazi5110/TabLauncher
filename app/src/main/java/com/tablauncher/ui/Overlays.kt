@@ -44,6 +44,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -116,7 +117,7 @@ fun FolderOverlay(fid: String) {
     val byKey by ctl.app.apps.byKey.collectAsState()
     val folder = layout.home.firstOrNull { it is HomeItem.Folder && it.fid == fid } as? HomeItem.Folder
     if (folder == null) {
-        ctl.openFolder = null
+        LaunchedEffect(Unit) { ctl.openFolder = null }
         return
     }
     Scrim({ ctl.openFolder = null }) {
@@ -297,6 +298,26 @@ fun MenuPopup(state: MenuState) {
             ) {
                 Text(title, color = c.text2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+                val folderTarget = state.target as? MenuTarget.HomeFolder
+                if (folderTarget != null) {
+                    val f = folderTarget.folder
+                    Text("Size", color = c.text, fontSize = 15.5.sp, modifier = Modifier.padding(start = 18.dp, top = 4.dp, bottom = 6.dp))
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        Modifier.padding(horizontal = 14.dp).padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(1 to 1, 2 to 1, 2 to 2, 3 to 2, 4 to 2, 3 to 3, 4 to 3).forEach { (w, h) ->
+                            val on = f.w == w && f.h == h
+                            Text("$w×$h", color = if (on) Color.White else c.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (on) c.accent else c.card2)
+                                    .clickable { layout.resizeFolder(f.fid, w, h); close() }
+                                    .padding(horizontal = 11.dp, vertical = 7.dp))
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(c.line))
+                }
                 entries.forEachIndexed { i, e ->
                     if (i == shortcutEntries.size && i > 0) Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(c.line))
                     Row(

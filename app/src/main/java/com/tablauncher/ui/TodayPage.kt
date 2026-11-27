@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -83,7 +84,19 @@ fun TodayPage(m: HomeMetrics) {
                 Spacer(Modifier.height(4.dp))
             }
         }
-        items(layout.todayWidgets, key = { it.id }, span = { w ->
+        // The first few small widgets sit side by side in one row of equal height.
+        val topCount = if (m.landscape) 3 else 2
+        val top = layout.todayWidgets.filter { it.type != WidgetType.NEWS && it.type != WidgetType.APP_WIDGET }.take(topCount)
+        val rest = layout.todayWidgets.filter { it !in top }
+        if (top.isNotEmpty()) item(span = StaggeredGridItemSpan.FullLine, key = "top") {
+            Row(Modifier.fillMaxWidth().height(430.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                androidx.compose.runtime.CompositionLocalProvider(com.tablauncher.ui.widgets.LocalWidgetFill provides true) {
+                    top.forEach { w -> WidgetView(w, WidgetArea.TODAY, Modifier.weight(1f).fillMaxHeight()) }
+                }
+                repeat(topCount - top.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        items(rest, key = { it.id }, span = { w ->
             if (w.type == WidgetType.NEWS || (w.type == WidgetType.APP_WIDGET && w.heightDp > 360)) StaggeredGridItemSpan.FullLine
             else StaggeredGridItemSpan.SingleLane
         }) { w ->

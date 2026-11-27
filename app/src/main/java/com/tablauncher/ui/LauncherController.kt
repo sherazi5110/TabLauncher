@@ -105,10 +105,12 @@ class LauncherController(val app: TabLauncherApp) {
 
     var rootView: View? = null
     var pages: List<Page> = emptyList()
+    var packed: List<List<Placed>> = emptyList()
     var currentPage = 0
 
     /** Time of the last finger-down on an icon/widget, so a long-press there doesn't also open Customize. */
     var lastItemPress = 0L
+    var lastLongPress = 0L
 
     // Hooks provided by MainActivity.
     var requestPermission: (String) -> Unit = {}
@@ -274,37 +276,47 @@ class LauncherController(val app: TabLauncherApp) {
         val ch = g.rect.height / g.rows
         val col = ((p.x - g.rect.left) / cw).toInt().coerceIn(0, g.cols - 1)
         val row = ((p.y - g.rect.top) / ch).toInt().coerceIn(0, g.rows - 1)
-        val slot = row * g.cols + col
         val home = app.layout.current.home
-        val global = g.start + slot
-        val iconCenter = Offset(g.rect.left + (col + 0.5f) * cw, g.rect.top + row * ch + ch * 0.4f)
-        val over = home.getOrNull(global)?.takeIf { slot < g.capacity }
+        val placed = packed.getOrNull(homeIndex).orEmpty()
         val draggedId = (s.item as? DragItem.Home)?.item?.id
-        val near = (p - iconCenter).getDistance() < min(cw, ch) * 0.3f
-        val canMerge = over != null && over.id != draggedId && s.item.appKey != null &&
-            !(over is HomeItem.App && over.key == s.item.appKey)
+        val over = placed.firstOrNull { col in it.col until it.col + it.w && row in it.row until it.row + it.h }
+        val big = over != null && (over.w > 1 || over.h > 1)
+        val iconCenter = Offset(g.rect.left + (col + 0.5f) * cw, g.rect.top + row * ch + ch * 0.4f)
+        val near = big || (p - iconCenter).getDistance() < min(cw, ch) * 0.3f
+        val canMerge = over != null && over.item.id != draggedId && s.item.appKey != null &&
+            !(over.item is HomeItem.App && over.item.key == s.item.appKey)
+
+        // Where an item dropped here would go in the Home list.
+        val insertAt = when {
+            over != null -> over.index
+            else -> placed.firstOrNull { it.row > row || (it.row == row && it.col > col) }?.index
+                ?: placed.lastOrNull()?.let { it.index + 1 }
+                ?: packed.take(homeIndex).sumOf { it.size }
+        }.coerceIn(0, home.size)
 
         val cand: String
         val action: () -> Unit
         if (canMerge && near) {
-            cand = "m:${over!!.id}"
-            action = { drag.mergeTarget = over.id }
+            cand = "m:${over!!.item.id}"
+            action = { drag.mergeTarget = over.item.id }
         } else {
             drag.mergeTarget = null
             if (s.item is DragItem.Home) {
                 val from = home.indexOfFirst { it.id == draggedId }
-                val to = global.coerceAtMost(home.size - 1)
+                // Over an item: take its place. Over an empty cell: go just before the next item.
+                val to = (if (over != null || from !in 0 until insertAt) insertAt else insertAt - 1)
+                    .coerceIn(0, (home.size - 1).coerceAtLeast(0))
                 cand = "i:$to"
                 action = { if (from >= 0 && from != to) app.layout.moveHome(from, to) }
             } else {
-                drag.insertIndex = global.coerceAtMost(home.size)
+                drag.insertIndex = insertAt
                 return
             }
         }
         if (drag.candidate != cand) {
             drag.candidate = cand
             drag.candidateSince = now
-        } else if (now - drag.candidateSince > (if (cand.startsWith("m:")) 350 else 160)) {
+        } else if (now - drag.candidateSince > (if (cand.startsWith("m:")) 350 else 200)) {
             action()
         }
     }

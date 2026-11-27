@@ -74,8 +74,32 @@ fun rememberAppIcon(app: AppInfo?): ImageBitmap? {
     return state.value
 }
 
+private val clockPackages = setOf(
+    "com.google.android.deskclock", "com.android.deskclock", "com.zui.deskclock", "com.lenovo.deskclock",
+    "com.sec.android.app.clockpackage", "com.oneplus.deskclock", "com.coloros.alarmclock", "com.android.alarmclock",
+)
+private val calendarPackages = setOf(
+    "com.google.android.calendar", "com.android.calendar", "com.zui.calendar", "com.lenovo.calendar",
+    "com.samsung.android.calendar", "com.coloros.calendar", "com.simplemobiletools.calendar.pro",
+)
+
+enum class LiveIcon { CLOCK, CALENDAR }
+
+fun liveIconFor(app: AppInfo): LiveIcon? = when {
+    app.packageName in clockPackages -> LiveIcon.CLOCK
+    app.packageName in calendarPackages -> LiveIcon.CALENDAR
+    app.isSystem && app.label.equals("Clock", ignoreCase = true) -> LiveIcon.CLOCK
+    app.isSystem && app.label.equals("Calendar", ignoreCase = true) -> LiveIcon.CALENDAR
+    else -> null
+}
+
 @Composable
 fun AppIconImage(app: AppInfo?, size: Dp, modifier: Modifier = Modifier) {
+    when (app?.let(::liveIconFor)) {
+        LiveIcon.CLOCK -> { LiveClockIcon(size, modifier); return }
+        LiveIcon.CALENDAR -> { LiveCalendarIcon(size, modifier); return }
+        null -> {}
+    }
     val bmp = rememberAppIcon(app)
     if (bmp != null) {
         Image(bitmap = bmp, contentDescription = app?.label, modifier = modifier.size(size))
@@ -170,6 +194,10 @@ fun Modifier.launcherGestures(
         when (result) {
             1 -> onTap()
             0 -> {
+                // An icon inside a big folder and the folder itself both see the press: first one wins.
+                val now = SystemClock.uptimeMillis()
+                if (now - controller.lastLongPress < 250) return@awaitEachGesture
+                controller.lastLongPress = now
                 onLongPress()
                 while (true) {
                     val ev = awaitPointerEvent()
@@ -186,13 +214,95 @@ fun Modifier.launcherGestures(
     }
 }
 
-/** Marks touches on a widget so a long-press there doesn't open Customize. */
-fun Modifier.markItemPress(controller: LauncherController): Modifier = pointerInput(Unit) {
+/**
+ * Long-press anywhere on a widget to edit widgets. Watches touches before the widget's own buttons
+ * see them, and only takes over once the press has lasted long enough.
+ */
+fun Modifier.markItemPress(controller: LauncherController, onLongPress: () -> Unit = {}): Modifier = pointerInput(Unit) {
+    val initial = androidx.compose.ui.input.pointer.PointerEventPass.Initial
     awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+        val down = awaitFirstDown(requireUnconsumed = false, pass = initial)
         controller.lastItemPress = SystemClock.uptimeMillis()
+        val released = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            while (true) {
+                val ev = awaitPointerEvent(initial)
+                val ch = ev.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull true
+                if (!ch.pressed || ch.isConsumed) return@withTimeoutOrNull true
+                if ((ch.position - down.position).getDistance() > viewConfiguration.touchSlop) return@withTimeoutOrNull true
+            }
+            @Suppress("UNREACHABLE_CODE") true
+        }
+        if (released == null) {
+            onLongPress()
+            // Swallow the rest of this touch so buttons inside the widget don't fire.
+            while (true) {
+                val ev = awaitPointerEvent(initial)
+                ev.changes.forEach { it.consume() }
+                if (ev.changes.none { it.pressed }) break
+            }
+        }
     }
 }
 
 @Composable
 fun rememberIconShape(shape: IconShape): Shape = remember(shape) { composeShape(shape) }
+
+/** Clock app icon that shows the real time. */
+@Composable
+fun LiveClockIcon(size: Dp, modifier: Modifier = Modifier) {
+    val dark = LocalIconSpec.current.style != ResolvedIconStyle.LIGHT
+    val now by produceState(java.time.LocalTime.now()) {
+        while (true) {
+            value = java.time.LocalTime.now()
+            kotlinx.coroutines.delay(1000L - System.currentTimeMillis() % 1000L)
+        }
+    }
+    val bg = if (dark) Color(0xFF1C1C1F) else Color.White
+    val face = if (dark) Color(0xFFF2F2F7) else Color(0xFF1C1C1E)
+    androidx.compose.foundation.Canvas(modifier.size(size).clip(LocalIconShape.current).background(bg)) {
+        val c = center
+        val r = this.size.minDimension * 0.42f
+        for (i in 0 until 12) {
+            val a = Math.toRadians(i * 30.0)
+            val inner = if (i % 3 == 0) r * 0.78f else r * 0.84f
+            drawLine(face.copy(alpha = if (i % 3 == 0) 1f else 0.5f),
+                Offset(c.x + inner * kotlin.math.sin(a).toFloat(), c.y - inner * kotlin.math.cos(a).toFloat()),
+                Offset(c.x + r * 0.93f * kotlin.math.sin(a).toFloat(), c.y - r * 0.93f * kotlin.math.cos(a).toFloat()),
+                strokeWidth = r * 0.05f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+        fun hand(angleDeg: Double, len: Float, width: Float, color: Color) {
+            val a = Math.toRadians(angleDeg)
+            drawLine(color, c, Offset(c.x + len * kotlin.math.sin(a).toFloat(), c.y - len * kotlin.math.cos(a).toFloat()),
+                strokeWidth = width, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+        val sec = now.second
+        val min = now.minute + sec / 60.0
+        val hr = (now.hour % 12) + min / 60.0
+        hand(hr * 30, r * 0.5f, r * 0.1f, face)
+        hand(min * 6, r * 0.75f, r * 0.07f, face)
+        hand(sec * 6.0, r * 0.82f, r * 0.03f, Color(0xFFFF9F0A))
+        drawCircle(Color(0xFFFF9F0A), r * 0.06f, c)
+    }
+}
+
+/** Calendar app icon that shows today's date. */
+@Composable
+fun LiveCalendarIcon(size: Dp, modifier: Modifier = Modifier) {
+    val dark = LocalIconSpec.current.style != ResolvedIconStyle.LIGHT
+    val today by produceState(java.time.LocalDate.now()) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            value = java.time.LocalDate.now()
+        }
+    }
+    Column(
+        modifier.size(size).clip(LocalIconShape.current).background(if (dark) Color(0xFF2C2C2E) else Color.White),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(today.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH).uppercase(java.util.Locale.ENGLISH),
+            color = Color(0xFFFF3B30), fontSize = (size.value * 0.16f).sp, fontWeight = FontWeight.SemiBold, lineHeight = (size.value * 0.18f).sp)
+        Text("${today.dayOfMonth}", color = if (dark) Color.White else Color(0xFF1C1C1E), fontSize = (size.value * 0.44f).sp,
+            fontWeight = FontWeight.Light, lineHeight = (size.value * 0.48f).sp)
+    }
+}

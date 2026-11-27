@@ -8,7 +8,7 @@ import java.io.StringReader
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-data class NewsItem(val title: String, val source: String, val link: String, val time: Long)
+data class NewsItem(val title: String, val source: String, val link: String, val time: Long, val image: String? = null)
 
 data class NewsEdition(val code: String, val name: String, val hl: String, val gl: String, val ceid: String)
 
@@ -26,11 +26,20 @@ class NewsRepo(private val settings: Settings) {
             _items.value = _items.value + (topic to cached.second)
             return
         }
-        val params = "hl=${ed.hl}&gl=${ed.gl}&ceid=${ed.ceid}"
-        val url = if (topic == "TOP") "https://news.google.com/rss?$params"
-        else "https://news.google.com/rss/headlines/section/topic/$topic?$params"
-        val body = Net.get(url) ?: return
-        val list = parse(body)
+        // Bing News includes a picture for most stories; Google News is the text-only fallback.
+        val bingQuery = when (topic) {
+            "TOP" -> "top stories"
+            "WORLD" -> "world news"
+            else -> topic.lowercase()
+        }
+        val bing = Net.get("https://www.bing.com/news/search?q=${Net.enc(bingQuery)}&format=rss&cc=${ed.gl}&setlang=en")
+            ?.let { parse(it) }.orEmpty()
+        val list = if (bing.count { it.image != null } >= 3) bing else {
+            val params = "hl=${ed.hl}&gl=${ed.gl}&ceid=${ed.ceid}"
+            val url = if (topic == "TOP") "https://news.google.com/rss?$params"
+            else "https://news.google.com/rss/headlines/section/topic/$topic?$params"
+            Net.get(url)?.let { parse(it) }.orEmpty().ifEmpty { bing }
+        }
         if (list.isNotEmpty()) {
             cache[key] = System.currentTimeMillis() to list
             _items.value = _items.value + (topic to list)
@@ -49,28 +58,34 @@ class NewsRepo(private val settings: Settings) {
             val p = Xml.newPullParser()
             p.setInput(StringReader(xml))
             var inItem = false
-            var title = ""; var link = ""; var source = ""; var date = 0L
+            var title = ""; var link = ""; var source = ""; var date = 0L; var image: String? = null; var desc = ""
             var tag = ""
             while (p.next() != XmlPullParser.END_DOCUMENT) {
                 when (p.eventType) {
                     XmlPullParser.START_TAG -> {
                         tag = p.name
-                        if (tag == "item") { inItem = true; title = ""; link = ""; source = ""; date = 0L }
+                        if (tag == "item") { inItem = true; title = ""; link = ""; source = ""; date = 0L; image = null; desc = "" }
+                        if (inItem && image == null && (tag == "media:content" || tag == "media:thumbnail" || tag == "enclosure")) {
+                            image = p.getAttributeValue(null, "url")
+                        }
                     }
                     XmlPullParser.TEXT -> if (inItem) {
                         val t = p.text.trim()
                         if (t.isNotEmpty()) when (tag) {
                             "title" -> title += t
                             "link" -> link += t
-                            "source" -> source += t
+                            "source", "News:Source" -> source += t
                             "pubDate" -> date = runCatching { fmt.parse(t)?.time ?: 0L }.getOrDefault(0L)
+                            "News:Image" -> image = t
+                            "description" -> desc += t
                         }
                     }
                     XmlPullParser.END_TAG -> {
                         if (p.name == "item" && inItem) {
                             inItem = false
                             val clean = if (source.isNotEmpty() && title.endsWith(" - $source")) title.removeSuffix(" - $source") else title
-                            if (clean.isNotEmpty() && link.isNotEmpty()) out += NewsItem(clean, source, link, date)
+                            if (image == null) image = Regex("<img[^>]+src=\"([^\"]+)\"").find(desc)?.groupValues?.get(1)
+                            if (clean.isNotEmpty() && link.isNotEmpty()) out += NewsItem(clean, source, realLink(link), date, image?.let(::bigImage))
                         }
                         tag = ""
                     }
@@ -80,6 +95,19 @@ class NewsRepo(private val settings: Settings) {
             // Return whatever was parsed.
         }
         return out.take(30)
+    }
+
+    /** Bing wraps article links in a redirect; open the article directly. */
+    private fun realLink(link: String): String = try {
+        android.net.Uri.parse(link).getQueryParameter("url") ?: link
+    } catch (e: Exception) {
+        link
+    }
+
+    /** Ask Bing's thumbnail service for a bigger picture. */
+    private fun bigImage(url: String): String {
+        val u = url.replace("http://", "https://")
+        return if (u.contains("bing.com/th")) "$u&w=640&h=360&c=7&rs=1" else u
     }
 
     companion object {

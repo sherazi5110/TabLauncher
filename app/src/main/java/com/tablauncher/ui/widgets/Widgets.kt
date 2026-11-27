@@ -32,6 +32,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -94,11 +97,15 @@ import kotlin.math.roundToInt
 
 val CardShape = RoundedCornerShape(22.dp)
 
+/** True when a widget sits in a fixed-height row and should fill it. */
+val LocalWidgetFill = androidx.compose.runtime.compositionLocalOf { false }
+
 @Composable
 fun WidgetCard(modifier: Modifier = Modifier, padding: PaddingValues = PaddingValues(16.dp), content: @Composable ColumnScope.() -> Unit) {
     val c = LocalColors.current
     Column(
         modifier
+            .then(if (LocalWidgetFill.current) Modifier.fillMaxHeight() else Modifier)
             .shadow(if (c.dark) 0.dp else 5.dp, CardShape, ambientColor = Color(0x22000000), spotColor = Color(0x22000000))
             .clip(CardShape)
             .background(c.card)
@@ -202,7 +209,11 @@ fun ClockHeader(big: Dp, modifier: Modifier = Modifier) {
 @Composable
 fun WidgetView(item: WidgetItem, area: WidgetArea, modifier: Modifier = Modifier, compact: Boolean = false) {
     val ctl = LocalController.current
-    Box(modifier.markItemPress(ctl)) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Box(modifier.markItemPress(ctl) {
+        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        ctl.editWidgets = true
+    }) {
         when (item.type) {
             WidgetType.WEATHER -> WeatherWidget(big = area == WidgetArea.TODAY && !compact, compact = compact)
             WidgetType.UP_NEXT -> UpNextWidget(compact)
@@ -333,6 +344,7 @@ fun UpNextWidget(compact: Boolean = false) {
     val ctl = LocalController.current
     val c = LocalColors.current
     val ctx = LocalContext.current
+    val fill = LocalWidgetFill.current
     val events by ctl.app.calendar.events.collectAsState()
     val granted by ctl.app.calendar.hasPermission.collectAsState()
     LaunchedEffect(Unit) {
@@ -342,13 +354,18 @@ fun UpNextWidget(compact: Boolean = false) {
         }
     }
     WidgetCard(Modifier.fillMaxWidth()) {
-        CardHeader("Up next", dot = Color(0xFFFF3B30))
+        CardHeader("Up next", dot = Color(0xFFFF3B30)) {
+            Text("+ New event", color = c.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable {
+                    ctl.startIntent(Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI), "No calendar app found")
+                }.padding(horizontal = 6.dp, vertical = 2.dp))
+        }
         Spacer(Modifier.height(10.dp))
         when {
             !granted -> Text("Tap to show your calendar events", color = c.text2, fontSize = 14.sp,
                 modifier = Modifier.clickable { ctl.requestPermission(Manifest.permission.READ_CALENDAR) })
             events.isEmpty() -> Text("No upcoming events", color = c.text2, fontSize = 14.sp)
-            else -> events.take(if (compact) 2 else 3).forEachIndexed { i, e ->
+            else -> events.take(if (compact || fill) 2 else 3).forEachIndexed { i, e ->
                 if (i > 0) Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth().clickable {
                     ctl.startIntent(Intent(Intent.ACTION_VIEW, ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, e.id)))
@@ -359,6 +376,56 @@ fun UpNextWidget(compact: Boolean = false) {
                         Text(e.title, color = c.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(eventTime(ctx, e.begin, e.end, e.allDay) + if (e.location.isNotBlank()) " · ${e.location}" else "",
                             color = c.text2, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        if (fill || (!compact && events.isEmpty())) {
+            Spacer(Modifier.height(14.dp))
+            MonthCalendar()
+        }
+    }
+}
+
+/** This month at a glance; tap a day to open it in your calendar app. */
+@Composable
+fun MonthCalendar() {
+    val ctl = LocalController.current
+    val c = LocalColors.current
+    rememberNow()
+    val today = java.time.LocalDate.now()
+    val first = today.withDayOfMonth(1)
+    val firstDow = java.time.temporal.WeekFields.of(Locale.getDefault()).firstDayOfWeek
+    val offset = (first.dayOfWeek.value - firstDow.value + 7) % 7
+    val days = today.lengthOfMonth()
+    Text(today.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)), color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(6.dp))
+    Row(Modifier.fillMaxWidth()) {
+        for (i in 0 until 7) {
+            val d = firstDow.plus(i.toLong())
+            Text(d.getDisplayName(java.time.format.TextStyle.NARROW, Locale.ENGLISH), color = c.text2, fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+    val cells = offset + days
+    for (week in 0 until (cells + 6) / 7) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+            for (i in 0 until 7) {
+                val day = week * 7 + i - offset + 1
+                Box(Modifier.weight(1f).height(26.dp), contentAlignment = Alignment.Center) {
+                    if (day in 1..days) {
+                        val isToday = day == today.dayOfMonth
+                        Box(
+                            Modifier.size(26.dp).clip(CircleShape).background(if (isToday) c.accent else Color.Transparent).clickable {
+                                val millis = today.withDayOfMonth(day).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                ctl.startIntent(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("content://com.android.calendar/time/$millis")),
+                                    "No calendar app found")
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("$day", color = if (isToday) Color.White else c.text, fontSize = 12.5.sp,
+                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal)
+                        }
                     }
                 }
             }
@@ -482,43 +549,105 @@ fun NewsWidget(maxItems: Int) {
     val s by ctl.app.settings.state.collectAsState()
     val all by ctl.app.news.items.collectAsState()
     var topic by rememberSaveable { mutableStateOf("TOP") }
+    var countryMenu by remember { mutableStateOf(false) }
+    var showMore by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(topic, s.newsEdition) { ctl.app.news.load(topic) }
     WidgetCard(Modifier.fillMaxWidth(), padding = PaddingValues(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("Top stories", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("Google News · ${NewsRepo.edition(s.newsEdition).name}", color = c.accent, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+            Box {
+                Text("🌐 ${NewsRepo.edition(s.newsEdition).name} ▾", color = c.accent, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { countryMenu = true }.padding(horizontal = 8.dp, vertical = 4.dp))
+                androidx.compose.material3.DropdownMenu(countryMenu, { countryMenu = false }) {
+                    NewsRepo.editions.forEach { ed ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(ed.name, fontWeight = if (ed.code == s.newsEdition) FontWeight.Bold else FontWeight.Normal) },
+                            onClick = {
+                                countryMenu = false
+                                ctl.app.settings.set(com.tablauncher.data.Settings.NEWS, ed.code)
+                                ctl.app.news.clear()
+                            },
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NewsRepo.topics.forEach { (id, name) -> Chip(name, id == topic) { topic = id } }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(14.dp))
         val items = all[topic].orEmpty()
         if (items.isEmpty()) {
             Text("Loading headlines…", color = c.text2, fontSize = 14.sp, modifier = Modifier.padding(vertical = 16.dp))
+            return@WidgetCard
         }
-        items.take(maxItems).forEachIndexed { i, n ->
-            if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
-            Row(
-                Modifier.fillMaxWidth().clickable { ctl.openUrl(n.link) }.padding(vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val hue = (n.source.hashCode() and 0xFFFF) % 360
-                Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
-                        .background(Color.hsv(hue.toFloat(), 0.45f, if (c.dark) 0.55f else 0.85f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(n.source.take(1).uppercase(Locale.ENGLISH), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(listOf(n.source, relativeTime(n.time)).filter { it.isNotBlank() }.joinToString(" · "),
-                        color = c.text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(n.title, color = c.text, fontSize = 15.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
-                        overflow = TextOverflow.Ellipsis, lineHeight = 20.sp)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val cols = (maxWidth / 290.dp).toInt().coerceIn(1, 4)
+            val count = if (cols == 1) maxItems else if (showMore) cols * 6 else cols * 2
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (cols == 1) {
+                    items.take(count).forEach { NewsRow(it) }
+                } else {
+                    items.take(count).chunked(cols).forEach { row ->
+                        Row(Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Max),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            row.forEach { NewsCard(it, Modifier.weight(1f).fillMaxHeight()) }
+                            repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                    if (items.size > count || showMore) {
+                        Text(if (showMore) "Show less" else "More stories", color = c.accent, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally).clip(RoundedCornerShape(14.dp))
+                                .clickable { showMore = !showMore }.padding(horizontal = 14.dp, vertical = 8.dp))
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NewsPicture(n: com.tablauncher.data.NewsItem, modifier: Modifier) {
+    val c = LocalColors.current
+    val hue = (n.source.hashCode() and 0xFFFF) % 360
+    Box(modifier.background(Color.hsv(hue.toFloat(), 0.45f, if (c.dark) 0.5f else 0.82f)), contentAlignment = Alignment.Center) {
+        Text(n.source.take(1).uppercase(Locale.ENGLISH), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+        if (n.image != null) {
+            AsyncImage(model = n.image, contentDescription = null, modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        }
+    }
+}
+
+@Composable
+private fun NewsCard(n: com.tablauncher.data.NewsItem, modifier: Modifier) {
+    val ctl = LocalController.current
+    val c = LocalColors.current
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(c.card2).clickable { ctl.openUrl(n.link) }) {
+        NewsPicture(n, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+        Column(Modifier.padding(12.dp)) {
+            Text(listOf(n.source, relativeTime(n.time)).filter { it.isNotBlank() }.joinToString(" · "),
+                color = c.text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Text(n.title, color = c.text, fontSize = 15.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 3,
+                overflow = TextOverflow.Ellipsis, lineHeight = 20.sp)
+        }
+    }
+}
+
+@Composable
+private fun NewsRow(n: com.tablauncher.data.NewsItem) {
+    val ctl = LocalController.current
+    val c = LocalColors.current
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { ctl.openUrl(n.link) }, verticalAlignment = Alignment.CenterVertically) {
+        NewsPicture(n, Modifier.size(width = 84.dp, height = 60.dp).clip(RoundedCornerShape(12.dp)))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(listOf(n.source, relativeTime(n.time)).filter { it.isNotBlank() }.joinToString(" · "),
+                color = c.text2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(n.title, color = c.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, lineHeight = 19.sp)
         }
     }
 }
@@ -529,41 +658,58 @@ fun NewsWidget(maxItems: Int) {
 fun ScoresWidget(maxItems: Int) {
     val ctl = LocalController.current
     val c = LocalColors.current
+    val fill = LocalWidgetFill.current
     val s by ctl.app.settings.state.collectAsState()
     val matches by ctl.app.sports.matches.collectAsState()
-    val leagues = s.sportsLeagues.mapNotNull { SportsRepo.league(it) }
-    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    val defaultSport = s.sportsLeagues.firstNotNullOfOrNull { SportsRepo.league(it)?.sport } ?: "Football"
+    var sport by rememberSaveable { mutableStateOf(defaultSport) }
+    val ofSport = SportsRepo.leagues.filter { it.sport == sport }
+    val leagues = ofSport.filter { it.id in s.sportsLeagues }.ifEmpty { ofSport.take(3) }
+    var selected by rememberSaveable(sport) { mutableStateOf(leagues.firstOrNull()?.id) }
     val current = leagues.firstOrNull { it.id == selected } ?: leagues.firstOrNull()
-    LaunchedEffect(s.sportsLeagues) {
+    LaunchedEffect(current?.id) {
+        val id = current?.id ?: return@LaunchedEffect
         while (true) {
-            ctl.app.sports.refresh()
+            ctl.app.sports.ensure(id)
             delay(60_000)
         }
     }
     WidgetCard(Modifier.fillMaxWidth(), padding = PaddingValues(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("Live scores", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            val liveCount = matches.values.sumOf { l -> l.count { it.state == MatchState.LIVE } }
-            if (liveCount > 0) {
-                Text("● $liveCount live", color = Color(0xFFFF3B30), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+            val liveCount = current?.let { matches[it.id] }?.count { it.state == MatchState.LIVE } ?: 0
+            if (liveCount > 0) Text("● $liveCount live", color = Color(0xFFFF3B30), fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(10.dp))
+        if (leagues.size > 1) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                leagues.forEach { l -> Chip(l.name.removeSuffix(" (all matches)"), l.id == current?.id) { selected = l.id } }
+            }
+            Spacer(Modifier.height(4.dp))
+        }
+        val list = current?.let { matches[it.id] }
+        val body: @Composable () -> Unit = {
+            when {
+                list == null -> Text("Loading scores…", color = c.text2, fontSize = 14.sp, modifier = Modifier.padding(vertical = 16.dp))
+                list.isEmpty() -> Text("No matches right now", color = c.text2, fontSize = 14.sp, modifier = Modifier.padding(vertical = 16.dp))
+                else -> list.take(if (fill) 20 else maxItems).forEachIndexed { i, m ->
+                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+                    MatchRow(m)
+                }
             }
         }
-        if (leagues.isEmpty()) {
-            Text("Choose your leagues in Customize → Widgets.", color = c.text2, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
-            return@WidgetCard
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            leagues.forEach { l -> Chip(l.name.removeSuffix(" (all matches)"), l.id == current?.id) { selected = l.id } }
-        }
-        Spacer(Modifier.height(6.dp))
-        val list = current?.let { matches[it.id] }
-        when {
-            list == null -> Text("Loading scores…", color = c.text2, fontSize = 14.sp, modifier = Modifier.padding(vertical = 16.dp))
-            list.isEmpty() -> Text("No matches right now", color = c.text2, fontSize = 14.sp, modifier = Modifier.padding(vertical = 16.dp))
-            else -> list.take(maxItems).forEachIndexed { i, m ->
-                if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
-                MatchRow(m)
+        if (fill) Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { body() } else body()
+        // One button per sport.
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            SportsRepo.sports.forEach { (name, emoji) ->
+                val on = name == sport
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(if (on) c.accent.copy(alpha = 0.18f) else c.card2)
+                        .then(if (on) Modifier.border(2.dp, c.accent, CircleShape) else Modifier)
+                        .clickable { sport = name },
+                    contentAlignment = Alignment.Center,
+                ) { Text(emoji, fontSize = 19.sp) }
             }
         }
     }
@@ -641,6 +787,7 @@ fun AppWidgetCard(item: WidgetItem) {
                 AndroidView(
                     factory = { ctx ->
                         (ctl.app.widgets.createView(ctx, item.appWidgetId) ?: return@AndroidView TextView(ctx)).also {
+                            (it as? com.tablauncher.data.LongPressWidgetView)?.onLongPress = { ctl.editWidgets = true }
                             it.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                             view.value = it
                         }
