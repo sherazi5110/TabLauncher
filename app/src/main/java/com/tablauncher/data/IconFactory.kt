@@ -44,7 +44,7 @@ object Shapes {
             }
             IconShape.SQUIRCLE -> {
                 // Superellipse |x|^n + |y|^n = 1 gives the smooth "continuous corner" look.
-                val n = 5.0
+                val n = 4.2
                 val r = size / 2.0
                 val steps = 96
                 for (i in 0..steps) {
@@ -136,25 +136,51 @@ object IconFactory {
     }
 
     private fun drawLegacy(c: Canvas, d: Drawable, size: Int, style: ResolvedIconStyle, tint: Int) {
-        // Draw full size first to see whether the icon already fills its square.
         val full = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         d.setBounds(0, 0, size, size)
         d.draw(Canvas(full))
-        val k = (size * 0.08f).toInt()
-        val filled = listOf(k to k, size - 1 - k to k, k to size - 1 - k, size - 1 - k to size - 1 - k)
-            .all { (x, y) -> Color.alpha(full.getPixel(x, y)) > 200 }
-        when (style) {
-            ResolvedIconStyle.LIGHT -> c.drawColor(Color.WHITE)
-            else -> darkBackground(c, size)
+
+        // Find the visible part of the icon and how "solid" it is.
+        var minX = size; var minY = size; var maxX = -1; var maxY = -1
+        val px = IntArray(size * size)
+        full.getPixels(px, 0, size, 0, 0, size, size)
+        for (y in 0 until size) for (x in 0 until size) {
+            if ((px[y * size + x] ushr 24) > 40) {
+                if (x < minX) minX = x; if (x > maxX) maxX = x
+                if (y < minY) minY = y; if (y > maxY) maxY = y
+            }
         }
+        if (maxX < 0) { full.recycle(); return }
+        val bw = maxX - minX + 1
+        val bh = maxY - minY + 1
+        var opaque = 0
+        for (y in minY..maxY) for (x in minX..maxX) if ((px[y * size + x] ushr 24) > 200) opaque++
+        val fill = opaque.toFloat() / (bw * bh)
         val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
         if (style == ResolvedIconStyle.TINTED) paint.colorFilter = tintFilter(tint)
-        if (filled && style != ResolvedIconStyle.TINTED) {
-            c.drawBitmap(full, 0f, 0f, paint)
+        val src = android.graphics.Rect(minX, minY, maxX + 1, maxY + 1)
+
+        if (fill > 0.7f && style != ResolvedIconStyle.TINTED) {
+            // The icon is already a solid shape (circle, rounded square…): stretch it to fill our
+            // shape, and paint the corners with the colour of its edge so nothing looks cut off.
+            fun at(x: Int, y: Int) = px[y.coerceIn(0, size - 1) * size + x.coerceIn(0, size - 1)]
+            val ix = (bw * 0.08f).toInt(); val iy = (bh * 0.08f).toInt()
+            val cx = (minX + maxX) / 2; val cy = (minY + maxY) / 2
+            val edge = listOf(at(cx, minY + iy), at(cx, maxY - iy), at(minX + ix, cy), at(maxX - ix, cy))
+                .filter { (it ushr 24) > 200 }
+            if (edge.isNotEmpty()) {
+                c.drawColor(Color.rgb(edge.map { Color.red(it) }.average().toInt(),
+                    edge.map { Color.green(it) }.average().toInt(), edge.map { Color.blue(it) }.average().toInt()))
+            }
+            val over = if (fill > 0.88f) size * 0.03f else 0f // trim the old rim of square-ish icons
+            c.drawBitmap(full, src, RectF(-over, -over, size + over, size + over), paint)
+            if (style == ResolvedIconStyle.DARK) c.drawColor(Color.argb(70, 0, 0, 0))
         } else {
-            val s = size * 0.72f
-            val o = (size - s) / 2
-            c.drawBitmap(full, null, RectF(o, o, o + s, o + s), paint)
+            // A symbol without its own background: centre it on a plain tile.
+            if (style == ResolvedIconStyle.LIGHT) c.drawColor(Color.WHITE) else darkBackground(c, size)
+            val scale = size * 0.68f / maxOf(bw, bh)
+            val w = bw * scale; val h = bh * scale
+            c.drawBitmap(full, src, RectF((size - w) / 2, (size - h) / 2, (size + w) / 2, (size + h) / 2), paint)
         }
         full.recycle()
     }

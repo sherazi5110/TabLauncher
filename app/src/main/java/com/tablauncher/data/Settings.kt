@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class ThemeMode(val title: String) { SYSTEM("Auto"), LIGHT("Light"), DARK("Dark") }
 
-enum class IconStyle(val title: String) { AUTO("Auto"), LIGHT("Light"), DARK("Dark"), TINTED("Tinted") }
+enum class IconStyle(val title: String) { LIGHT("Normal"), AUTO("Auto"), DARK("Dark"), TINTED("Tinted") }
 
 enum class IconShape(val title: String) {
     SQUIRCLE("Squircle"), ROUNDED("Rounded"), CIRCLE("Circle"), SQUARE("Square"), TEARDROP("Teardrop")
@@ -25,7 +25,7 @@ enum class SwipeAction(val title: String) { SEARCH("Open search"), NOTIFICATIONS
 
 data class SettingsData(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val iconStyle: IconStyle = IconStyle.AUTO,
+    val iconStyle: IconStyle = IconStyle.LIGHT,
     val tintColor: Int = 0xFF5B8CFF.toInt(),
     val iconShape: IconShape = IconShape.SQUIRCLE,
     val iconScale: Float = 1f,

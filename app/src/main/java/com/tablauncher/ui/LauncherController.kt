@@ -90,6 +90,8 @@ class DragController {
 class LauncherController(val app: TabLauncherApp) {
     var searchOpen by mutableStateOf(false)
     var customizeOpen by mutableStateOf(false)
+    /** While customizing a wallpaper, preview this mode (true = dark) instead of the current one. */
+    var previewDark by mutableStateOf<Boolean?>(null)
     var editWidgets by mutableStateOf(false)
     var openFolder by mutableStateOf<String?>(null)
     var openCategory by mutableStateOf<CategoryView?>(null)

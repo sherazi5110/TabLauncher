@@ -113,7 +113,9 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
         val lai = activityInfos[app.key] ?: return null
         return withContext(Dispatchers.Default) {
             try {
-                val d = lai.getIcon(context.resources.displayMetrics.densityDpi) ?: return@withContext null
+                val dpi = context.resources.displayMetrics.densityDpi
+                val raw = rawIcon(lai, dpi)
+                val d = (raw as? android.graphics.drawable.AdaptiveIconDrawable) ?: lai.getIcon(dpi) ?: raw ?: return@withContext null
                 var bmp = IconFactory.render(d, iconSize, spec.shape, spec.style, spec.tint)
                 if (app.isWork) bmp = badge(bmp, app.user)
                 bmp.asImageBitmap().also { iconCache.put(ck, it) }
@@ -121,6 +123,16 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
                 null
             }
         }
+    }
+
+    /** The icon straight from the app's resources (some systems replace it with a pre-shaped bitmap). */
+    private fun rawIcon(lai: LauncherActivityInfo, dpi: Int): android.graphics.drawable.Drawable? = try {
+        val ai = lai.applicationInfo
+        val res = context.packageManager.getResourcesForApplication(ai)
+        val id = lai.activityInfo.iconResource.takeIf { it != 0 } ?: ai.icon
+        if (id == 0) null else res.getDrawableForDensity(id, dpi, null)
+    } catch (e: Exception) {
+        null
     }
 
     private fun badge(bmp: Bitmap, user: UserHandle): Bitmap {

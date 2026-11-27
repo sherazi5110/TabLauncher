@@ -92,11 +92,12 @@ private class WallpaperImage(val image: ImageBitmap?, val isDark: Boolean)
 fun LauncherRoot(ctl: LauncherController) {
     val s by ctl.app.settings.state.collectAsState()
     val systemDark = isSystemInDarkTheme()
-    val dark = when (s.themeMode) {
+    val themeDark = when (s.themeMode) {
         ThemeMode.SYSTEM -> systemDark
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
+    val dark = ctl.previewDark.takeIf { ctl.customizeOpen } ?: themeDark
     val wallpaperId = if (dark) s.darkWallpaper else s.lightWallpaper
     val context = LocalContext.current
     val view = LocalView.current
@@ -117,8 +118,9 @@ fun LauncherRoot(ctl: LauncherController) {
             }
         }
         // Keep the system / lock screen wallpaper in step with the launcher, if enabled.
-        LaunchedEffect(wallpaperId, dark, s.lockScreenSync) {
-            if (s.lockScreenSync) ctl.app.wallpapers.applyToSystem(wallpaperId, dark)
+        val realWallpaper = if (themeDark) s.darkWallpaper else s.lightWallpaper
+        LaunchedEffect(realWallpaper, themeDark, s.lockScreenSync) {
+            if (s.lockScreenSync) ctl.app.wallpapers.applyToSystem(realWallpaper, themeDark)
         }
         SideEffect {
             val w = activity?.window ?: return@SideEffect

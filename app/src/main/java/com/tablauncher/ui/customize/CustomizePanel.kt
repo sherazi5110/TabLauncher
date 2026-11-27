@@ -274,6 +274,9 @@ private fun WallpaperTab() {
     val imported by ctl.app.wallpapers.imported.collectAsState()
     val scope = rememberCoroutineScope()
     var editDark by rememberSaveable { mutableStateOf(c.dark) }
+    // Show the mode being edited in the preview on the left.
+    LaunchedEffect(editDark) { ctl.previewDark = editDark }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { ctl.previewDark = null } }
     val selected = if (editDark) st.darkWallpaper else st.lightWallpaper
     fun choose(id: String) = ctl.app.settings.set(if (editDark) Settings.WP_DARK else Settings.WP_LIGHT, id)
 
@@ -283,6 +286,8 @@ private fun WallpaperTab() {
 
     SectionTitle("Choose wallpaper for")
     Segmented(listOf(false, true), editDark, { if (it) "Dark mode" else "Light mode" }) { editDark = it }
+    Text("The preview shows ${if (editDark) "dark" else "light"} mode while you choose.", color = c.text2, fontSize = 12.5.sp,
+        modifier = Modifier.padding(top = 6.dp))
     Spacer(Modifier.height(12.dp))
 
     val ids = WallpaperRenderer.builtins.map { "builtin:${it.id}" } + imported
@@ -364,15 +369,30 @@ private fun LayoutTab() {
     val ctl = LocalController.current
     val st by ctl.app.settings.state.collectAsState()
     val set = ctl.app.settings::set
-    SectionTitle("Landscape grid")
-    Group {
-        Stepper("Columns", st.landCols, 4..9) { set(Settings.LAND_COLS, it) }
-        Stepper("Rows", st.landRows, 3..7) { set(Settings.LAND_ROWS, it) }
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    @Composable
+    fun landscapeGrid(title: String) {
+        SectionTitle(title)
+        Group {
+            Stepper("Columns", st.landCols, 4..9) { set(Settings.LAND_COLS, it) }
+            Stepper("Rows", st.landRows, 3..7) { set(Settings.LAND_ROWS, it) }
+        }
     }
-    SectionTitle("Portrait grid")
-    Group {
-        Stepper("Columns", st.portCols, 3..7) { set(Settings.PORT_COLS, it) }
-        Stepper("Rows", st.portRows, 4..9) { set(Settings.PORT_ROWS, it) }
+    @Composable
+    fun portraitGrid(title: String) {
+        SectionTitle(title)
+        Group {
+            Stepper("Columns", st.portCols, 3..7) { set(Settings.PORT_COLS, it) }
+            Stepper("Rows", st.portRows, 4..9) { set(Settings.PORT_ROWS, it) }
+        }
+    }
+    if (landscape) {
+        landscapeGrid("App grid – landscape (now)")
+        portraitGrid("App grid – portrait (when you rotate)")
+    } else {
+        portraitGrid("App grid – portrait (now)")
+        landscapeGrid("App grid – landscape (when you rotate)")
     }
     SectionTitle("Home Screen")
     Group {
@@ -425,7 +445,7 @@ private fun IconsTab() {
     Text(
         when (st.iconStyle) {
             IconStyle.AUTO -> "Normal icons in light mode, dark icons in dark mode."
-            IconStyle.LIGHT -> "Always the app's normal colourful icon."
+            IconStyle.LIGHT -> "The app's own colourful icon, in your chosen shape."
             IconStyle.DARK -> "Dark background with a coloured symbol."
             IconStyle.TINTED -> "One colour for every icon."
         },
